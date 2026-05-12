@@ -1,0 +1,744 @@
+---
+title: "IPTW Model - Novel GLP1s vs other classes"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+The emulated trials are as follows:
+- "data1_novel": novel GLP1s vs SGLT2
+- "data2_novel": novel GLP1s vs DPP4
+- "data3_novel": novel GLP1s vs sulfonylureas
+
+Save results in /../novel_res
+
+Weights are truncated at the 2.5th and 97.5th percentiles. Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal".
+
+**Sensitivity analyses instructions**: 
+- Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal". Nothing to change or uncomment. Entropy balancing worked and leads to excellent balance on all covariates in all cohorts. Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal" (nothing to change -- the ebal weights are computed and saved automatically) 
+- Option to perform 2.5% asymmetric trimming to the IPTW weights to improve overlap and focus on population with more equipoise (lines 66-85, lines 226-246, and 377-396)
+
+Note: trimming before or after computing the weights does not matter. 
+
+```{r}
+#### IPTW USING BASELINE COVARIATES ####
+
+library(dplyr)
+library(magrittr)
+library(haven)
+library(tidyr)
+
+here::here()
+data <- readRDS("../output/ipcw_novel.rds")
+cov_list <- readRDS("../output/cov_list_novel.rds")
+
+data %<>%
+    mutate(
+        novel_flag = if_else(index_glp1 == "semaglutide" | index_glp1 == "tirzepatide", 1, 0)
+    )
+
+```
+
+```{r}
+# data1: sglt2 (ref) vs novel GLP1s (comp)
+data1 <- data %>%
+  filter(novel_flag == 1 | index_class == "SGLT2") %>%
+  mutate(trt = as.factor(if_else(novel_flag == 1, 1, 0))) # those with novel GLP1s are "treated"
+
+summary(data1)
+
+ps_mod_crude1 <- glm(trt ~ 1, family = binomial(), data = data1)
+
+ps_formula <- as.formula(paste("trt ~", paste(cov_list, collapse = " + ")))
+ps_formula
+
+ps_mod_adj1 <- glm(
+  ps_formula,
+  data = data1, 
+  family = binomial()
+)
+
+data1$ps <- predict(ps_mod_adj1, type = "response", newdata = data1) 
+data1$ps_marg <- predict(ps_mod_crude1, type = "response")
+
+# optional: trim asymetrically at 2.5%
+# perc_upper <- data1 %>%
+#   filter(trt == 0) %>%
+#   summarise(perc_97_5 = quantile(ps, 0.975, na.rm = TRUE))
+
+# perc_lower <- data1 %>%
+#   filter(trt == 1) %>%
+#   summarise(perc_2_5 = quantile(ps, 0.025, na.rm = TRUE))
+
+# data1 %<>%
+#   mutate(
+#     perc_97_5 = round(perc_upper$perc_97_5, 4),
+#     perc_2_5 = round(perc_lower$perc_2_5, 4)
+#   )
+
+
+# nrow(data1)  
+
+# data1 <- data1 %>% filter(ps < perc_97_5 & ps > perc_2_5)
+
+# rm(perc_upper, perc_lower)
+
+data1$iptw <- if_else(data1$trt ==1, 1/data1$ps, 1/(1-data1$ps))
+data1$siptw <- data1$iptw * data1$ps_marg    
+
+# check which patients have extreme weights
+summary(data1$siptw)
+test <- data1 %>%
+  filter(siptw > 30)
+
+summary(test)
+
+# truncate at 2.5 and 97.5 percentiles
+data1$iptw_notrunc <- data1$iptw
+data1$siptw_notrunc <- data1$siptw
+
+lower_bound <- quantile(data1$siptw, 0.025)
+upper_bound <- quantile(data1$siptw, 0.975)
+data1$siptw <- pmin(pmax(data1$siptw, lower_bound), upper_bound)
+rm(lower_bound, upper_bound)
+
+lower_bound <- quantile(data1$iptw, 0.025)
+upper_bound <- quantile(data1$iptw, 0.975)
+data1$iptw <- pmin(pmax(data1$iptw, lower_bound), upper_bound)
+
+summary(data1$iptw)
+summary(data1$siptw)
+
+# check balance and update ps model accordingly
+library(cobalt)
+weights_out1 <- WeightIt::weightit(
+  formula = ps_formula,
+  data = data1,
+  method = "glm"
+)
+
+# truncate at 2.5 and 97.5 percentiles
+lower <- quantile(weights_out1$weights, 0.025)
+upper <- quantile(weights_out1$weights, 0.975)
+weights_out1$weights <- pmin(pmax(weights_out1$weights, lower), upper)
+
+summary(weights_out1$weights)
+
+
+weights_out1$treat <- if_else(weights_out1$treat == 1, "Novel GLP1", "SGLT2")
+
+library(ggplot2)
+
+p <- bal.plot(
+  weights_out1,
+  var.name = "prop.score",
+  which = "both",
+  type = "density",
+  mirror = FALSE,
+  grid = FALSE,
+  legend.labels = c("Novel GLP1", "SGLT2"),
+  position = "bottom"
+)
+
+p <- p + 
+  ggtitle("Propensity Score Distributional Balance") +
+  xlab("Propensity score") +
+  ylab("Density")
+
+p
+
+ggsave("../novel_res/ps_bal1.png", plot = p, width = 6, height = 4, units = "in", bg = "white")
+dev.off()
+rm(p)
+
+bal_tab1 <- bal.tab(ps_formula,
+                    data = data1,
+                    weights = 'iptw',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
+
+bal1 <- bal_tab1$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (IPTW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal1$Variable <- row.names(bal1)
+write.table(bal1, "../novel_res/bal1.csv", col.names = T, row.names = T, append = F, sep = ',')
+
+p <- love.plot(
+  bal_tab1, 
+  binary = "std",
+  thresholds = c(m = .1),
+  title = "Covariate Balance with IPTW",
+  position = "bottom",
+  var.order = "unadjusted",
+  size = 2
+)
+
+p <- p + theme(
+  panel.border = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.line = element_line(color = "black"),
+  
+  axis.text.x = element_text(size = 8),
+  axis.text.y = element_text(size = 8),
+  axis.title.x = element_text(size = 8, face = 'bold'),
+  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+  
+  legend.position = "bottom", 
+  legend.title = element_text(size = 8, face = 'bold'),
+  legend.text = element_text(size = 8),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.5, "lines")
+) 
+
+p
+
+ggsave("../novel_res/loveplot1.png", plot = p, width = 6, height = 12, units = "in", bg = 'white')
+dev.off()
+rm(p)
+
+# repeat for other comparisons:
+# data2: dpp4 (ref) vs novel GLP1s (comp)
+data2 <- data %>%
+  filter(novel_flag == 1 | index_class == "DPP4") %>%
+  mutate(trt = as.factor(if_else(novel_flag == 1, 1, 0)))
+
+ps_mod_crude2 <- glm(trt ~ 1, data = data2, family = binomial)
+
+ps_mod_adj2 <- glm(
+  ps_formula,
+  family = binomial,
+  data = data2
+)
+
+data2$ps <- predict(ps_mod_adj2, type = "response")
+data2$ps_marg <- predict(ps_mod_crude2, type = "response") 
+
+# optional: trim asymetrically at 2.5%
+# perc_upper <- data2 %>%
+#   filter(trt == 0) %>%
+#   summarise(perc_97_5 = quantile(ps, 0.975, na.rm = TRUE))
+
+# perc_lower <- data2 %>%
+#   filter(trt == 1) %>%
+#   summarise(perc_2_5 = quantile(ps, 0.025, na.rm = TRUE))
+
+# data2 %<>%
+#   mutate(
+#     perc_97_5 = round(perc_upper$perc_97_5, 4),
+#     perc_2_5 = round(perc_lower$perc_2_5, 4)
+#   )
+
+
+# nrow(data2)  
+
+# data2 <- data2 %>% filter(ps < perc_97_5 & ps > perc_2_5)
+
+# rm(perc_upper, perc_lower)
+
+data2$iptw <- if_else(data2$trt ==1, 1/data2$ps, 1/(1-data2$ps))
+data2$siptw <- data2$iptw * data2$ps_marg    
+
+summary(data1$siptw)
+test <- data1 %>%
+  filter(siptw > 30)
+
+summary(test)
+
+# truncate at 2.5 and 97.5 percentiles
+data2$iptw_notrunc <- data2$iptw
+data2$siptw_notrunc <- data2$siptw
+
+lower_bound <- quantile(data2$siptw, 0.025)
+upper_bound <- quantile(data2$siptw, 0.975)
+data2$siptw <- pmin(pmax(data2$siptw, lower_bound), upper_bound)
+rm(lower_bound, upper_bound)
+
+lower_bound <- quantile(data2$iptw, 0.025)
+upper_bound <- quantile(data2$iptw, 0.975)
+data2$iptw <- pmin(pmax(data2$iptw, lower_bound), upper_bound)
+
+weights_out2 <- WeightIt::weightit(
+  formula = ps_formula,
+  data = data2,
+  method = "glm"
+)
+
+# truncate at 2.5 and 97.5 percentiles
+lower <- quantile(weights_out2$weights, 0.025)
+upper <- quantile(weights_out2$weights, 0.975)
+weights_out2$weights <- pmin(pmax(weights_out2$weights, lower), upper)
+
+summary(weights_out2$weights)
+
+
+weights_out2$treat <- if_else(weights_out2$treat == 1, "Novel GLP1", "DPP4")
+
+p <- bal.plot(
+  weights_out2,
+  var.name = "prop.score",
+  which = "both",
+  type = "density",
+  mirror = FALSE,
+  grid = FALSE,
+  legend.labels = c("Novel GLP1", "DPP4"),
+  position = "bottom"
+)
+
+p <- p + 
+  ggtitle("Propensity Score Distributional Balance") +
+  xlab("Propensity score") +
+  ylab("Density")
+
+p
+
+ggsave("../novel_res/ps_bal2.png", plot = p, width = 6, height = 4, units = "in", bg = "white")
+dev.off()
+rm(p)
+
+bal_tab2 <- bal.tab(ps_formula,
+                    data = data2,
+                    weights = 'iptw',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+)
+
+bal2 <- bal_tab2$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (IPTW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal2$Variable <- row.names(bal2)
+write.table(bal2, "../novel_res/bal2.csv", col.names = T, row.names = T, append = F, sep = ',')
+
+p <- love.plot(
+  bal_tab2, 
+  binary = "std",
+  thresholds = c(m = .1),
+  title = "Covariate Balance with IPTW",
+  position = "bottom",
+  var.order = "unadjusted",
+  size = 2
+)
+
+p <- p + theme(
+  panel.border = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.line = element_line(color = "black"),
+  
+  axis.text.x = element_text(size = 8),
+  axis.text.y = element_text(size = 8),
+  axis.title.x = element_text(size = 8, face = 'bold'),
+  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+  
+  legend.position = "bottom", 
+  legend.title = element_text(size = 8, face = 'bold'),
+  legend.text = element_text(size = 8),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.5, "lines")
+) 
+
+p
+
+ggsave("../novel_res/loveplot2.png", plot = p, width = 6, height = 12, units = "in", bg = 'white')
+dev.off()
+rm(p)
+
+#data3: sulfo (ref) vs novel GLP1s (comp)
+data3 <- data %>%
+  filter(novel_flag == 1| index_class == "SULFO") %>%
+  mutate(trt = as.factor(if_else(novel_flag == 1, 1, 0)))
+
+ps_mod_crude3 <- glm(trt ~ 1, data = data3, family = binomial)
+
+ps_mod_adj3 <- glm(ps_formula,
+                   family = binomial,
+                   data = data3
+)
+
+data3$ps <- predict(ps_mod_adj3, type = "response") 
+data3$ps_marg <- predict(ps_mod_crude3, type = "response")
+
+# optional: trim asymetrically at 2.5%
+# perc_upper <- data3 %>%
+#   filter(trt == 0) %>%
+#   summarise(perc_97_5 = quantile(ps, 0.975, na.rm = TRUE))
+
+# perc_lower <- data3 %>%
+#   filter(trt == 1) %>%
+#   summarise(perc_2_5 = quantile(ps, 0.025, na.rm = TRUE))
+
+# data3 %<>%
+#   mutate(
+#     perc_97_5 = round(perc_upper$perc_97_5, 4),
+#     perc_2_5 = round(perc_lower$perc_2_5, 4)
+#   )
+
+# nrow(data3)  
+
+# data3 <- data3 %>% filter(ps < perc_97_5 & ps > perc_2_5)
+
+# rm(perc_upper, perc_lower)
+
+data3$iptw <- if_else(data3$trt ==1, 1/data3$ps, 1/(1-data3$ps))
+data3$siptw <- data3$iptw * data3$ps_marg    
+
+summary(data1$siptw)
+test <- data1 %>%
+  filter(siptw > 30)
+
+summary(test)
+
+summary(data3$iptw)
+sd(data3$iptw)
+
+summary(data3$siptw)
+sd(data3$siptw)
+
+# truncate at 2.5 and 97.5 percentiles
+data3$iptw_notrunc <- data3$iptw
+data3$siptw_notrunc <- data3$siptw
+
+lower_bound <- quantile(data3$siptw, 0.025)
+upper_bound <- quantile(data3$siptw, 0.975)
+data3$siptw <- pmin(pmax(data3$siptw, lower_bound), upper_bound)
+rm(lower_bound, upper_bound)
+
+lower_bound <- quantile(data3$iptw, 0.025)
+upper_bound <- quantile(data3$iptw, 0.975)
+data3$iptw <- pmin(pmax(data3$iptw, lower_bound), upper_bound)
+
+weights_out3 <- WeightIt::weightit(
+  formula = ps_formula,
+  data = data3,
+  method = "glm"
+)
+
+# truncate at 2.5 and 97.5 percentiles
+lower <- quantile(weights_out3$weights, 0.025)
+upper <- quantile(weights_out3$weights, 0.975)
+weights_out3$weights <- pmin(pmax(weights_out3$weights, lower), upper)
+
+summary(weights_out3$weights)
+
+
+weights_out3$treat <- if_else(weights_out3$treat == 1, "Novel GLP1", "Sulfonylureas")
+
+p <- bal.plot(
+  weights_out3,
+  var.name = "prop.score",
+  which = "both",
+  type = "density",
+  mirror = FALSE,
+  grid = FALSE,
+  legend.labels = c("Novel GLP1", "Sulfonylureas"),
+  position = "bottom"
+)
+
+p <- p + 
+  ggtitle("Propensity Score Distributional Balance") +
+  xlab("Propensity score") +
+  ylab("Density")
+
+p
+
+ggsave("../novel_res/ps_bal3.png", plot = p, width = 6, height = 4, units = "in", bg = "white")
+dev.off()
+
+bal_tab3 <- bal.tab(ps_formula,
+                    data = data3,
+                    weights = 'iptw',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+)
+
+bal3 <- bal_tab3$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (IPTW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal3$Variable <- row.names(bal3)
+write.table(bal3, "../novel_res/bal3.csv", col.names = T, row.names = T, append = F, sep = ',')
+
+p <- love.plot(
+  bal_tab3, 
+  binary = "std",
+  thresholds = c(m = .1),
+  title = "Covariate Balance with IPTW",
+  position = "bottom",
+  var.order = "unadjusted",
+  size = 2
+)
+
+p <- p + theme(
+  panel.border = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.line = element_line(color = "black"),
+  
+  axis.text.x = element_text(size = 8),
+  axis.text.y = element_text(size = 8),
+  axis.title.x = element_text(size = 8, face = 'bold'),
+  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+  
+  legend.position = "bottom", 
+  legend.title = element_text(size = 8, face = 'bold'),
+  legend.text = element_text(size = 8),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.5, "lines")
+) 
+
+p
+
+ggsave("../novel_res/loveplot3.png", plot = p, width = 6, height = 12, units = "in", bg = 'white')
+dev.off()
+rm(p)
+
+```
+
+
+## COMPUTE ENTROPY BALANCING WEIGHTS 
+Sensitivity analysis where use entropy balancing weights instead of IPTW.
+
+```{r}
+# data 1: 
+ebal_weights_out1 <- WeightIt::weightit(
+  formula = ps_formula,
+  data = data1,
+  method = "ebal"
+)
+
+summary(ebal_weights_out1$weights)
+
+data1$ebal <- ebal_weights_out1$weights
+
+bal_tab1 <- bal.tab(ps_formula,
+                    data = data1,
+                    weights = 'ebal',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
+
+bal1 <- bal_tab1$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (IPTW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal1$Variable <- row.names(bal1)
+write.table(bal1, "../novel_res/ebal1.csv", col.names = T, row.names = T, append = F, sep = ',')
+
+# data 2: 
+ebal_weights_out2 <- WeightIt::weightit(
+  formula = ps_formula,
+  data = data2,
+  method = "ebal"
+)
+
+summary(ebal_weights_out2$weights)
+
+data2$ebal <- ebal_weights_out2$weights
+
+bal_tab2 <- bal.tab(ps_formula,
+                    data = data2,
+                    weights = 'ebal',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
+
+bal2 <- bal_tab2$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (IPTW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal2$Variable <- row.names(bal1)
+write.table(bal2, "../novel_res/ebal2.csv", col.names = T, row.names = T, append = F, sep = ',')
+
+# data 3: 
+ebal_weights_out3 <- WeightIt::weightit(
+  formula = ps_formula,
+  data = data3,
+  method = "ebal"
+)
+
+summary(ebal_weights_out3$weights)
+
+data3$ebal <- ebal_weights_out3$weights
+
+bal_tab3 <- bal.tab(ps_formula,
+                    data = data3,
+                    weights = 'ebal',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
+
+bal3 <- bal_tab3$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (IPTW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal3$Variable <- row.names(bal3)
+write.table(bal3, "../novel_res/ebal3.csv", col.names = T, row.names = T, append = F, sep = ',')
+```
+
+## SAVE COHORT DATA WITH WEIGHTS
+
+```{r}
+data1 %<>%
+  mutate(
+    wfinal = ipcw_switch * ipcw_disc * iptw,
+    swfinal = ipcw_switch * ipcw_disc * siptw,
+    ebalfinal = ipcw_switch + ipcw_disc * ebal 
+  )
+
+
+data2 %<>%
+  mutate(
+    wfinal = ipcw_switch * ipcw_disc * iptw,
+    swfinal = ipcw_switch * ipcw_disc * siptw,
+    ebalfinal = ipcw_switch + ipcw_disc * ebal
+  )
+
+
+data3 %<>%
+  mutate(
+    wfinal = ipcw_switch * ipcw_disc * iptw,
+    swfinal = ipcw_switch * ipcw_disc * siptw,
+    ebalfinal = ipcw_switch + ipcw_disc * ebal
+  )
+
+# save all cohort dataframes
+# ready for description + analysis
+saveRDS(data, "../output/data_novel.rds") # all patients
+saveRDS(data1, "../output/data1_novel.rds") # novel GLP1s vs sglt2
+saveRDS(data2, "../output/data2_novel.rds") # novel GLP1s vs dpp4
+saveRDS(data3, "../output/data3_novel.rds") # novel GLP1s vs sulfo
+```
+
+
+
+## SAVE MODELS & DESCRIBE WEIGHTS
+
+```{r}
+# save models
+
+sink("../novel_res/iptw_models_novel.txt")
+
+print(ps_formula)
+
+cat("=" , rep("=", 70), "\n", sep = "")
+cat("IPTW MODELS\n")
+cat("Generated on:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+cat("=" , rep("=", 70), "\n\n", sep = "")
+
+
+cat("\n\n")
+cat("MODEL 1\n")
+cat("-" , rep("-", 70), "\n", sep = "")
+
+print(summary(ps_mod_adj1))
+
+cat("\n\n")
+cat("MODEL 2\n")
+cat("-" , rep("-", 70), "\n", sep = "")
+
+print(summary(ps_mod_adj2))
+
+cat("\n\n")
+cat("MODEL 3\n")
+cat("-" , rep("-", 70), "\n", sep = "")
+
+print(summary(ps_mod_adj3))
+
+sink()
+
+
+
+#### DESCRIBE THE WEIGHTS ####
+
+weights_summary_d1 <- data1 %>%
+  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal),
+               names_to = "Weight_Type", values_to = "value") %>%
+  group_by(Weight_Type) %>%
+  summarise(
+    Mean = round(mean(value, na.rm = TRUE), 3),
+    Median = round(median(value, na.rm = TRUE), 3),
+    SD = round(sd(value, na.rm = TRUE), 1),
+    Min = round(min(value, na.rm = TRUE), 3),
+    Max = round(max(value, na.rm = TRUE), 3),
+    Q1 = round(quantile(value, 0.25, na.rm = TRUE), 3),
+    Q3 = round(quantile(value, 0.75, na.rm = TRUE), 3),
+    IQR = round(IQR(value, na.rm = TRUE), 3)
+  ) %>%
+  mutate(Group = "Semaglutide vs SGLT2")
+
+
+weights_summary_d2 <- data2 %>%
+  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal),
+               names_to = "Weight_Type", values_to = "value") %>%
+  group_by(Weight_Type) %>%
+  summarise(
+    Mean = round(mean(value, na.rm = TRUE), 3),
+    Median = round(median(value, na.rm = TRUE), 3),
+    SD = round(sd(value, na.rm = TRUE), 1),
+    Min = round(min(value, na.rm = TRUE), 3),
+    Max = round(max(value, na.rm = TRUE), 3),
+    Q1 = round(quantile(value, 0.25, na.rm = TRUE), 3),
+    Q3 = round(quantile(value, 0.75, na.rm = TRUE), 3),
+    IQR = round(IQR(value, na.rm = TRUE), 3)
+  ) %>%
+  mutate(Group = "Semaglutide vs DPP4")
+
+
+weights_summary_d3 <- data3 %>%
+  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal),
+               names_to = "Weight_Type", values_to = "value") %>%
+  group_by(Weight_Type) %>%
+  summarise(
+    Mean = round(mean(value, na.rm = TRUE), 3),
+    Median = round(median(value, na.rm = TRUE), 3),
+    SD = round(sd(value, na.rm = TRUE), 1),
+    Min = round(min(value, na.rm = TRUE), 3),
+    Max = round(max(value, na.rm = TRUE), 3),
+    Q1 = round(quantile(value, 0.25, na.rm = TRUE), 3),
+    Q3 = round(quantile(value, 0.75, na.rm = TRUE), 3),
+    IQR = round(IQR(value, na.rm = TRUE), 3)
+  ) %>%
+  mutate(Group = "Semaglutide vs Sulfos")
+
+
+write.csv(weights_summary_d1, "../novel_res/iptw_and_final_weights_d1.csv", row.names = FALSE)
+write.csv(weights_summary_d2, "../novel_res/iptw_and_final_weights_d2.csv", row.names = FALSE)
+write.csv(weights_summary_d3, "../novel_res/iptw_and_final_weights_d3.csv", row.names = FALSE)
+```

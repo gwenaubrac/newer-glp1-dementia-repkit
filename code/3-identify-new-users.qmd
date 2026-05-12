@@ -1,0 +1,431 @@
+---
+title: "Identify New Users and Create Index Cohorts"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+This notebook identifies first use of one of the drugs of interest during the study period of interest. The first medication used during the study period is the index medication, and the date of first dispensing is the index date. We then use a 12 months washout period to exclude patients with prior use of the index drug, comparator drug, or other GLP-1 agonists in those 12 months. We are also excluding patients who initiate multiple study drugs on the same day. As an exception, given that semaglutide and tirzepatide are treated interchangeably in this analysis, patients who initiate both tirzepatide and semaglutide on the same day are not excluded. 
+
+Study period: May 2022 - January 2026
+
+We are starting the study at tirzepatide approval for T2D to avoid an over-representation of semaglutide initiators in the first few years of follow-up. 
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+library(tidyverse)
+library(here)
+library(arrow)
+library(lubridate)
+library(magrittr)
+
+here::here()
+
+# Define study period
+study_period_novel <- list(
+  start = as.Date("2022-05-01"),
+  end = as.Date("2026-01-01")
+)
+
+# Initialize log file to keep track of numbers
+log_lines <- c(
+  "=======================================================",
+  "New User Identification and Index Cohort Creation",
+  "=======================================================",
+  paste("Date:", Sys.Date()),
+  paste("Time:", format(Sys.time(), "%H:%M:%S")),
+  "",
+  "Study Periods:",
+  paste0("  Novel GLP1s: ", study_period_novel$start, " to ", study_period_novel$end),
+  ""
+)
+```
+
+
+First we will load all fills for the index medications in one same file. 
+```{r}
+#| label: load-dispensings
+#| message: false
+
+# Load all dispensing datasets
+dispensings_semaglutide <- read_parquet("../output/dispensings_semaglutide.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+dispensings_tirzepatide <- read_parquet("../output/dispensings_tirzepatide.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+dispensings_liraglutide <- read_parquet("../output/dispensings_liraglutide.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+dispensings_dulaglutide <- read_parquet("../output/dispensings_dulaglutide.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+dispensings_sglt2 <- read_parquet("../output/dispensings_sglt2.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+dispensings_dpp4 <- read_parquet("../output/dispensings_dpp4.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+dispensings_sulfo <- read_parquet("../output/dispensings_sulfo.parquet") %>%
+  select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
+
+# Create combined dataset for all study medications
+all_dispensings <- bind_rows(
+  dispensings_semaglutide,
+  dispensings_tirzepatide,
+  dispensings_liraglutide,
+  dispensings_dulaglutide,
+  dispensings_sglt2,
+  dispensings_dpp4,
+  dispensings_sulfo
+) 
+
+rm(
+  dispensings_semaglutide,
+  dispensings_tirzepatide,
+  dispensings_liraglutide,
+  dispensings_dulaglutide,
+  dispensings_sglt2,
+  dispensings_dpp4,
+  dispensings_sulfo
+)
+
+all_dispensings <- all_dispensings %>%
+  arrange(PATIENT_ID, DATE_OF_SERVICE)
+
+message("Loaded dispensing data for all medications")
+message("Total dispensing records: ", format(nrow(all_dispensings), big.mark = ","))
+message("Unique patients: ", format(n_distinct(all_dispensings$PATIENT_ID), big.mark = ","))
+
+log_lines <- c(
+  log_lines,
+  "Dispensing Data Loaded:",
+  paste0("Total records: ", format(nrow(all_dispensings), big.mark = ",")),
+  paste0("Unique patients: ", format(n_distinct(all_dispensings$PATIENT_ID), big.mark = ",")),
+  ""
+)
+```
+
+
+##  Identify New Users
+
+Now we will identify the first medication used during the study period, which will be each patient's index date. Patients initiating both semaglutide and tirzepatide on the same day will not be excluded.
+
+To test the code on just a subsample of the dispensings data, run the following chunk first. Otherwise, skip it and run the code on the original full dispensings data. It should also be noted that some claims have missing PROVIDER_NPI.
+
+```{r}
+#| label: test-sample
+#| message: false
+
+# For testing, take 10% random sample of unique patients and all their dispensings
+#set.seed(123)
+#test_patients <- all_dispensings %>%
+#  distinct(PATIENT_ID) %>%
+#  slice_sample(prop = 0.1)
+
+#all_dispensings <- all_dispensings %>%
+#  semi_join(test_patients, by = "PATIENT_ID")
+
+# head(all_dispensings)
+
+#length(which(is.na(all_dispensings$PROVIDER_NPI)))
+
+#test <- all_dispensings %>%
+#  filter(is.na(PROVIDER_NPI))
+```
+
+
+```{r}
+#| label: first-fill-novel
+#| message: false
+
+
+# Get drug fills during study period
+# and get earliest DATE_OF_SERVICE among all of these fills
+index_fill_novel <- all_dispensings %>%
+  filter(
+    DATE_OF_SERVICE >= study_period_novel$start,
+    DATE_OF_SERVICE <= study_period_novel$end
+  ) %>%
+    group_by(PATIENT_ID) %>%
+    summarise(
+      index_date = min(DATE_OF_SERVICE),
+      med_class = first(med_class),  # keeps first value for the patient
+      glp1_med = first(glp1_med),
+      PRESCRIBER_NPI = first(PRESCRIBER_NPI),
+      .groups = "drop"
+    )
+
+message("\nCohort D: Novel GLP1s vs other classes:")
+message("Total patients with a first fill during study period: ", format(nrow(index_fill_novel), big.mark = ","))
+
+log_lines <- c(
+  log_lines,
+  "Cohort D: Novel GLP1s vs other classes:",
+  paste0("Total patients with a first fill during study period", format(nrow(index_fill_novel), big.mark = ",")),
+  ""
+)
+ 
+# make sure that there are no invalid index_dates
+length(which(is.na(index_fill_novel$index_date))) # should be 0
+head(index_fill_novel)  
+
+gc()
+```
+
+We will check if patients had multiple medications on that first day, by joining the first dates determined above with all fills. 
+- Then, identify whether they had fills for different index groups
+- If they did, we will exclude them. 
+- We are additionally excluding patients who start different GLP1 medications, except semaglutide and tirzepatide together. 
+
+```{r}
+#| label: exclude-multi-novel
+#| message: false
+
+# Get all dispensings on each patient's first date
+index_dates <- index_fill_novel %>% select(PATIENT_ID, index_date)
+
+index_date_dispensings <- all_dispensings %>%
+  select(-PRESCRIBER_NPI) %>% # not interested in this variable from all dispensings
+  inner_join(index_dates, by = "PATIENT_ID") %>%
+  filter(DATE_OF_SERVICE == index_date) %>%
+  filter(glp1_med != "semaglutide" | glp1_med != "tirzepatide") # do not consider semaglutide and tirzepatide for exclusion
+
+head(index_date_dispensings)
+
+# Identify patients with multiple med_class values
+same_day_multiple_class <- index_date_dispensings %>%
+  group_by(PATIENT_ID, index_date) %>%
+  summarise(
+    n_groups = n_distinct(med_class),
+    groups = paste(sort(unique(med_class)), collapse = ", "),
+    .groups = "drop"
+  ) 
+
+same_day_multiple_class %<>%
+  filter(n_groups > 1)
+
+head(same_day_multiple_class)
+
+message("\nSame-day multi-class initiators identified: ", format(nrow(same_day_multiple_class), big.mark = ","))
+
+if (nrow(same_day_multiple_class) > 0) {
+  message("  Index group combinations:")
+  group_combos <- table(same_day_multiple_class$groups)
+  print(group_combos)
+}
+
+# Exclude these patients
+excluded_patients <- same_day_multiple_class$PATIENT_ID
+
+index_fill_novel %<>%
+  filter(!PATIENT_ID %in% excluded_patients)
+
+message("\nPatients remaining after excluding same-day multi-class initiators: ", format(nrow(index_fill_novel), big.mark = ","))
+message("Patients excluded: ", format(length(excluded_patients), big.mark = ","))
+
+log_lines <- c(
+  log_lines,
+  "Same-Day Multi-Class Initiator Exclusion:",
+  paste0("  Patients with same-day multi-class dispensings: ", format(nrow(same_day_multiple_class), big.mark = ",")),
+  paste0("  Patients excluded: ", format(length(excluded_patients), big.mark = ",")),
+  paste0("  Patients remaining: ", format(nrow(index_fill_novel), big.mark = ",")),
+  ""
+)
+
+rm(excluded_patients)
+
+# Now repeat for multiple glp1 medications
+
+# Identify patients with multiple glp1_med values
+same_day_multiple_glp1 <- index_date_dispensings %>%
+  group_by(PATIENT_ID, index_date) %>%
+  summarise(
+    n_groups = n_distinct(glp1_med),
+    groups = paste(sort(unique(glp1_med)), collapse = ", "),
+    .groups = "drop"
+  ) 
+
+same_day_multiple_glp1 %<>%
+  filter(n_groups > 1)
+
+head(same_day_multiple_glp1)
+
+message("\nSame-day multi-glp1 initiators identified (except sema + tirze combo): ", format(nrow(same_day_multiple_glp1), big.mark = ","))
+
+if (nrow(same_day_multiple_glp1) > 0) {
+  message("  Index glp1 combinations:")
+  group_combos <- table(same_day_multiple_glp1$groups)
+  print(group_combos)
+}
+
+# Exclude these patients
+excluded_patients <- same_day_multiple_glp1$PATIENT_ID
+
+index_fill_novel %<>%
+  filter(!PATIENT_ID %in% excluded_patients)
+
+message("\nPatients remaining after excluding same-day multi-glp1 initiators (except sema + tirze combo): ", format(nrow(index_fill_novel), big.mark = ","))
+message("Patients excluded: ", format(length(excluded_patients), big.mark = ","))
+
+log_lines <- c(
+  log_lines,
+  "Same-Day Multi-GLP1 Initiator Exclusion:",
+  paste0("  Patients with same-day multi-glp1 dispensings (except sema + tirze combo): ", format(nrow(same_day_multiple_glp1), big.mark = ",")),
+  paste0("  Patients excluded: ", format(length(excluded_patients), big.mark = ",")),
+  paste0("  Patients remaining: ", format(nrow(index_fill_novel), big.mark = ",")),
+  ""
+)
+
+rm(excluded_patients, index_date_dispensings)
+
+gc()
+```
+
+We will now check whether patients had a fill for an index or non-index medication class in the 12 months prior to their date of first use.  
+
+```{r}
+#| label: exclude-prior-novel
+#| message: false
+  
+# Get all dispensings within 1 year of index
+prior_use <- all_dispensings %>%
+  select(-PRESCRIBER_NPI) %>%
+  inner_join(index_fill_novel, by = "PATIENT_ID") %>%
+  filter(DATE_OF_SERVICE < index_date & DATE_OF_SERVICE > (index_date - 365)) %>%
+  group_by(PATIENT_ID) %>%
+  arrange(PATIENT_ID, DATE_OF_SERVICE) %>%
+  mutate(prior_use = n())
+
+head(prior_use)
+
+# If there is a fill for any drug class during that period
+# indicated by multiple rows per patient
+# then those patients had prior use of a study drug and will be excluded
+prior_use %<>%
+  filter(prior_use > 1)
+
+excluded_patients <- prior_use$PATIENT_ID
+
+# Exclude these patients
+index_fill_novel %<>%
+  filter(!PATIENT_ID %in% excluded_patients)
+
+message("\nPatients remaining after excluding prior use: ", format(nrow(index_fill_novel), big.mark = ","))
+message("Patients excluded: ", format(length(excluded_patients), big.mark = ","))
+
+log_lines <- c(
+  log_lines,
+  "Prior Use Exclusion:",
+  paste0("  Patients excluded: ", format(length(excluded_patients), big.mark = ",")),
+  paste0("  Patients remaining: ", format(nrow(index_fill_novel), big.mark = ",")),
+  ""
+)
+
+rm(excluded_patients)
+
+gc()
+```
+
+
+We can then describe how many patients initiated in each group. We are keeping the PRESCRIBER_NPI because we will need it later to get a proxy-level SES variable.
+
+```{r}
+#| label: get-info-novel
+#| message: false
+
+# Count by medication group
+index_novel_breakdown <- index_fill_novel %>%
+  count(index_class) %>%
+  arrange(desc(n))
+
+message("\nFirst dispensings by medication class:")
+print(index_novel_breakdown)
+
+# For GLP-1 users, show breakdown by specific medication
+glp1_breakdown <- index_fill_novel %>%
+  filter(index_class == "GLP1") %>%
+  count(index_glp1) %>%
+  arrange(desc(n))
+
+message("\nGLP-1 first dispensings by specific medication:")
+print(glp1_breakdown)
+
+log_lines <- c(
+  log_lines,
+  "Final class index dates:",
+  paste0("  Total patients: ", format(nrow(index_fill_novel), big.mark = ",")),
+  "",
+  "Breakdown by medication class:",
+  paste0("  GLP1: ", format(sum(index_fill_novel$index_class == "GLP1"), big.mark = ",")),
+  paste0("  SGLT2: ", format(sum(index_fill_novel$index_class == "SGLT2"), big.mark = ",")),
+  paste0("  DPP4: ", format(sum(index_fill_novel$index_class == "DPP4"), big.mark = ",")),
+  paste0("  SULFO: ", format(sum(index_fill_novel$index_class == "SULFO"), big.mark = ",")),
+  "",
+  "GLP-1 breakdown by specific medication:",
+  paste0("  Semaglutide: ", format(sum(index_fill_novel$index_glp1 == "semaglutide", na.rm = TRUE), big.mark = ",")),
+  paste0("  Tirzepatide: ", format(sum(index_fill_novel$index_glp1 == "tirzepatide", na.rm = TRUE), big.mark = ",")),
+  paste0("  Liraglutide: ", format(sum(index_fill_novel$index_glp1 == "liraglutide", na.rm = TRUE), big.mark = ",")),
+  paste0("  Dulaglutide: ", format(sum(index_fill_novel$index_glp1 == "dulaglutide", na.rm = TRUE), big.mark = ",")),
+  ""
+)
+
+rm(same_day_multiple_class, same_day_multiple_glp1, prior_use, glp1_breakdown)
+
+# Save cohort
+write_parquet(index_fill_novel, "../output/index_novel_comparisons.parquet")
+rm(index_fill_novel)
+```
+
+## Summary
+
+We can describe the number of patients and study periods for each cohort in our log, for documentation.
+
+```{r}
+#| label: summary
+
+index_fill_novel <- read_parquet("../output/index_novel_comparisons.parquet")
+
+# Create summary table
+cohort_summary <- tibble(
+  cohort = "Novel GLP1s Comparisons",
+  study_period_start = study_period_novel$start,
+  study_period_end = study_period_novel$end,
+  n_patients = nrow(index_fill_novel)
+)
+
+print(cohort_summary)
+
+# Write log file
+
+writeLines(log_lines, "../output/new_user_identification_log.txt")
+```
+
+Finally we can also save the cohort for later use in STATA. 
+
+```{r}
+#|label: convert-stata
+
+# Convert to stata for next step where determine continuous coverage
+# because this step is too inefficient in R
+library(haven)
+write_dta(index_fill_novel, "../output/index_novel_comparisons.dta")
+```
+
+We can also delete the dispensings files saved in parquet format as we only need the .dta ones for the next steps (and these files are very bulky). We also won't need the parquet format of the index cohorts. 
+
+```{r}
+#|label: delete-files
+
+# delete dispensings parquet files
+file.remove("../output/dispensings_glp1.parquet")
+file.remove("../output/dispensings_sglt2.parquet")
+file.remove("../output/dispensings_dpp4.parquet")
+file.remove("../output/dispensings_sulfo.parquet")
+file.remove("../output/dispensings_semaglutide.parquet")
+file.remove("../output/dispensings_tirzepatide.parquet")
+file.remove("../output/dispensings_liraglutide.parquet")
+file.remove("../output/dispensings_dulaglutide.parquet")
+
+# delete index parquet files
+file.remove("../output/index_novel_comparisons.parquet")
+```

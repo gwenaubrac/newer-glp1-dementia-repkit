@@ -1,0 +1,202 @@
+---
+title: "Prepare Data for Analyses - Novel GlP1s vs other classes"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+Convert appropriate variables to factors, create variable for index year, create missing categories for region, race/ethnicity, and plan type. 
+Save list of relevant covariates in a vector that will be used in next codes for the weighting models. 
+
+**Sensitivity analysis:** 
+- Require prior metformin use in 12-months prior to index (lines 194-95)
+- Exclude patients with baseline age >85 (line 198)
+
+```{r}
+## clean and format covariate data for weighting models
+
+library(dplyr)
+library(magrittr)
+library(haven)
+library(lubridate)
+library(here)
+
+here::here()
+
+data <- read_dta("../output/covs_novel.dta")
+
+summary(data$bmi)
+
+# should be empty
+test <- data %>% filter(is.na(bmi))
+
+# one person with missing bmi -- exclude them 
+data %<>% filter(!is.na(bmi))
+
+table(data$index_class)
+table(data$index_glp1)
+
+# combine hypertension into single binary indicator
+data %>%
+  summarize(
+    hyper1 = sum(hyper1),
+    hyper2 = sum(hyper2),
+    hyper3 = sum(hyper3),
+    hyper4 = sum(hyper4),
+    hyper5 = sum(hyper5),
+    hyper6 = sum(hyper6),
+    hyper7 = sum(hyper7)
+  )
+
+data %<>%
+  mutate(
+    hyper = if_else(hyper1==1 | hyper2==1 | hyper3==1 | hyper4==1 | hyper5==1 | hyper6==1 | hyper7==1, 1, 0)
+  )
+
+table(data$hyper)
+
+# combine dyslipidemia into single binary indicator
+data %>%
+  summarize(
+    dyslipid1 = sum(dyslipid1),
+    dyslipid2 = sum(dyslipid2),
+    dyslipid3 = sum(dyslipid3),
+    dyslipid4 = sum(dyslipid4),
+    dyslipid5 = sum(dyslipid5)
+  )
+
+data %<>%
+  mutate(
+    dyslipid = if_else(dyslipid1==1 | dyslipid2==1 | dyslipid3==1 | dyslipid4==1 | dyslipid5==1, 1, 0)
+  )
+
+table(data$dyslipid)
+
+# drop columns we don't need anymore
+data %<>%
+  select(-days_to_index, -hyper1, -hyper2, -hyper3, -hyper4, -hyper5, -hyper6, -hyper7, -dyslipid1, -dyslipid2, -dyslipid3, -dyslipid4, -dyslipid5)
+
+#### COMORBIDITIES ####
+
+# list of comorbidities indicators create based on date of occurrence
+# this list will be saved and re-used for the analyses, so only need to update covs here
+cov_clinic <- c(
+  "alcohol", 
+  "cancer", 
+  "cvd", 
+  "ckd", 
+  "revas", 
+  "ampu", 
+  "retino", 
+  "diab_neuro",
+  "hypoglyc",
+  "dyslipid",
+  "eskd",
+  "hf",
+  "hepa",
+  "hyper",
+  "ihd",
+  "nafld",
+  "pace",
+  "pvd",
+  "vhd",
+  "edema",
+  "copd",
+  "apnea",
+  "thyroid",
+  "depression",
+  "anxiety",
+  "hosp_cat",
+  "emerg_cat",
+  "statin", 
+  "betablocker", 
+  "arb",
+  "thiazide",
+  "ccb",
+  "aceinhibitor",
+  "insulin",
+  "metformin",
+  #"thiazolidinediones" none found for now
+  "prop_b_q"
+          )
+
+summary(data)
+
+# convert the variables to factors
+for (var in cov_clinic) {
+  print(var)
+  data[[var]] <- as.factor(if_else(is.na(data[[var]]), 0, data[[var]]))
+}
+
+summary(data)
+
+
+#### OTHER COVARIATES ####
+
+data$year <- as.factor(year(data$index_date))
+
+# categorize BMI and create missing category
+# create 1-point increment categories
+data$bmi_cat <- cut(data$bmi, 
+                    breaks = c(0, 18.5, 25, 30, 35, 40, Inf),
+                    labels = c("<18.5", "18.5-24.9", "25-29.9", "30-34.9", "35-39.9", "40+"),
+                    right = FALSE)
+
+data$bmi_cat <- as.character(data$bmi_cat)
+data$bmi_cat[is.na(data$bmi)] <- "Missing"
+table(data$bmi_cat)
+
+data %<>% 
+  mutate(
+    region = if_else(region == '', 'MISSING', region),
+    race = if_else(race == '', 'MISSING', race),
+    plan_type = if_else(plan_type == '', 'MISSING', plan_type)
+    )
+
+# we will remove patients with missing region because there are few
+# and this causes issues with the IPCW and IPCW models later
+table(data$region)
+
+data %<>%
+  filter(region == "MISSING")
+
+cov_demog <- c(
+  "gender",
+  "year",
+  "bmi_cat",
+  "region",
+  "race",
+  "plan_type"
+)
+
+for (var in cov_demog) {
+  print(var)
+  data[[var]] <- as.factor(data[[var]])
+}
+
+
+# set reference group to largest group
+table(data$race)
+data$race <- relevel(data$race, ref = "WHITE")
+
+table(data$plan_type)
+data$plan_type <- relevel(data$plan_type, ref = "MEDICARE")
+
+table(data$region)
+data$region <- relevel(data$region, ref = "MIDWEST")
+
+# this is the final list of covariates
+cov_list <- c("age", cov_clinic, cov_demog)
+cov_list
+
+# sensitivity analysis to require prior metformin use:
+# data %<>% filter(metformin == 1)
+# cov_list <- cov_list[!cov_list %in% "metformin"] 
+
+# sensitivity analysis where censor baseline age:
+# data %<>% filter(age <= 85)
+
+saveRDS(cov_list, "../output/cov_list_novel.rds")
+saveRDS(data, "../output/clean_novel.rds")
+```

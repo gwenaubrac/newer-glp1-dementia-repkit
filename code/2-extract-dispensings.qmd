@@ -1,0 +1,361 @@
+---
+title: "Extract Index Medication Dispensings"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+This notebook extracts pharmacy claims for index medications from Snowflake, creating chronological dispensing histories for each medication. We are getting the dispensings for one medication of interest at a time. We end up with all of the pharmacy dispensings for the drugs of interest available in the data, which will later be used to identify date of first use (new users) during the study periods of interest and also treatment adherence over time. 
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+library(tidyverse)
+library(here)
+library(DBI)
+library(odbc)
+library(dplyr)
+library(dbplyr)
+library(arrow)
+
+here::here()
+
+# Set up connection to Snowflake
+con <- dbConnect(
+  odbc::odbc(),
+  dsn = Sys.getenv("dsn")
+)
+
+# Initialize log file for extraction summary
+log_lines <- c(
+  "=======================================================",
+  "Pharmacy Dispensing Extraction Summary",
+  "=======================================================",
+  paste("Date:", Sys.Date()),
+  paste("Time:", format(Sys.time(), "%H:%M:%S")),
+  ""
+)
+
+```
+
+## Check NDC Format and Set Up Filters
+
+```{r}
+#| label: verify-ndc-format
+#| message: false
+
+# Set Snowflake context to pharmacy data
+DBI::dbExecute(con, "USE DATABASE DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD")
+DBI::dbExecute(con, "USE SCHEMA COHORT_1302462")
+
+# Load pharmacy claims table (read-only)
+pharmacy_tbl <- tbl(con, "PHARMACY_LATEST")
+
+# Check NDC11 format in PHARMACY_LATEST
+# to make sure the format is the same in PHARMACY_LATEST and our NDC code files
+pharmacy_sample <- pharmacy_tbl %>%
+  select(NDC11) %>%
+  head(10) %>%
+  collect()
+
+pharmacy_sample
+
+# Check NDC11 format in  exported files
+ndc_sample <- read_csv("../output/semaglutide_ndcs.csv", show_col_types = FALSE) %>%
+  head(5) %>%
+  pull(NDC11)
+
+ndc_sample
+
+# Select just the columns we are interested in
+pharmacy_filtered <- pharmacy_tbl %>%
+  select(
+    PATIENT_ID,
+    DATE_OF_SERVICE,
+    DAYS_SUPPLY,
+    PRESCRIBER_NPI,
+    NDC11,
+    TRANSACTION_TYPE
+  )
+
+```
+
+## Extract and Save Dispensings
+
+To do this, we are writing a function that:
+1. Pulls the pharmacy data from Komodo and filters for NDC codes in the list we provide
+2. Create a "med_class" variable to keep track of which medication class we're pulling the fills for (for GLP1s we will also have glp1_med to keep track of which specific GLP1 medication it is))
+3. Keep track of number of fills found, number of unique patients, and average dispensings per patient
+4. Save as a compresset parquet file and return the information (to the log and the console)
+
+Some filters we are applying to the dispensings:
+- Only PAID transactions
+- Only valid days fill (≠0)
+
+```{r}
+#| label: extract-dispensings
+#| message: false
+
+# Function to extract, clean, and save dispensings for one medication at a time
+# This minimizes memory usage by not holding multiple large datasets in memory
+extract_and_save_dispensings <- function(ndc_file, medication_name, med_class, 
+                                         output_file, glp1_med = NA) {
+  
+  message("\n========================================")
+  message("Processing: ", medication_name)
+  message("========================================")
+  
+  # Load NDC list
+  ndc_list <- read_csv(ndc_file, show_col_types = FALSE) %>%
+    pull(NDC11)
+  
+  message("  Found ", length(ndc_list), " unique NDCs")
+  
+  # Join with pharmacy claims, collect, clean, and save in one pipeline
+  # and filter pharmacy claims for paid dispensings with valid days supply
+  dispensings_temp <- pharmacy_filtered %>%
+    filter(NDC11 %in% ndc_list) %>%
+    filter(TRANSACTION_TYPE == "PAID") %>%
+    filter(DAYS_SUPPLY != 0) %>%
+    collect() %>%
+    mutate(
+      DATE_OF_SERVICE = as.Date(DATE_OF_SERVICE),
+      med_class = med_class,
+      glp1_med = glp1_med
+    ) %>%
+    arrange(PATIENT_ID, DATE_OF_SERVICE) %>%
+    select(-NDC11)  # Remove NDC11 to reduce table size
+  
+  # Get statistics before saving
+  n_records <- nrow(dispensings_temp)
+  n_patients <- n_distinct(dispensings_temp$PATIENT_ID)
+  dispensings_per_patient <- round(n_records / n_patients, 1)
+  
+  message("  Retrieved ", format(n_records, big.mark = ","), " dispensing records")
+  message("  Unique patients: ", format(n_patients, big.mark = ","))
+  message("  Dispensings per patient: ", dispensings_per_patient)
+  
+  # Save as compressed Parquet file
+  write_parquet(dispensings_temp, output_file)
+  message("  Saved to: ", output_file)
+  
+  # Add to log
+  log_lines <<- c(
+    log_lines,
+    paste0("Medication: ", medication_name),
+    paste0("  NDC codes: ", length(ndc_list)),
+    paste0("  Dispensing records: ", format(n_records, big.mark = ",")),
+    paste0("  Unique patients: ", format(n_patients, big.mark = ",")),
+    paste0("  Dispensings per patient: ", dispensings_per_patient),
+    paste0("  Output file: ", output_file),
+    ""
+  )
+  
+  # Return statistics for summary table
+  stats <- list(
+    medication = medication_name,
+    n_dispensings = n_records,
+    n_patients = n_patients,
+    dispensings_per_patient = dispensings_per_patient
+  )
+  
+  # Clean up temp object and force garbage collection
+  rm(dispensings_temp)
+  gc()
+  
+  return(stats)
+}
+
+# Process each medication one at a time to minimize memory usage
+stats_semaglutide <- extract_and_save_dispensings(
+  "../output/semaglutide_ndcs.csv", # NDC code file
+  "Semaglutide", # medication name (medication_name)
+  "GLP1", # medication group name (med_class)
+  "../output/dispensings_semaglutide.parquet", # where to save the file
+  "semaglutide" # GLP1 medication name if applicable (glp1_med)
+)
+
+stats_tirzepatide <- extract_and_save_dispensings(
+  "../output/tirzepatide_ndcs.csv",
+  "Tirzepatide",
+  "GLP1",
+  "../output/dispensings_tirzepatide.parquet",
+  "tirzepatide"
+)
+
+stats_liraglutide <- extract_and_save_dispensings(
+  "../output/liraglutide_ndcs.csv",
+  "Liraglutide",
+  "GLP1",
+  "../output/dispensings_liraglutide.parquet",
+  "liraglutide"
+)
+
+stats_dulaglutide <- extract_and_save_dispensings(
+  "../output/dulaglutide_ndcs.csv",
+  "Dulaglutide",
+  "GLP1",
+  "../output/dispensings_dulaglutide.parquet",
+  "dulaglutide"
+)
+
+stats_sglt2 <- extract_and_save_dispensings(
+  "../output/sglt2_ndcs.csv",
+  "SGLT2i",
+  "SGLT2",
+  "../output/dispensings_sglt2.parquet"
+)
+
+stats_dpp4 <- extract_and_save_dispensings(
+  "../output/dpp4_ndcs.csv",
+  "DPP-4i",
+  "DPP4",
+  "../output/dispensings_dpp4.parquet"
+)
+
+stats_sulfo <- extract_and_save_dispensings(
+  "../output/sulfonylurea_ndcs.csv",
+  "Sulfonylureas",
+  "SULFO",
+  "../output/dispensings_sulfo.parquet"
+)
+
+```
+
+## Create Combined GLP-1 Dataset
+
+Combine all the fills for the GLP1 medications (arranged by ID and date of service) and similarly compute summary statistics. 
+
+```{r}
+#| label: create-glp1-combined
+
+# Load individual GLP-1 files and combine (more memory efficient than keeping in memory)
+dispensings_glp1 <- bind_rows(
+  read_parquet("../output/dispensings_semaglutide.parquet"),
+  read_parquet("../output/dispensings_tirzepatide.parquet"),
+  read_parquet("../output/dispensings_liraglutide.parquet"),
+  read_parquet("../output/dispensings_dulaglutide.parquet")
+) %>%
+  arrange(PATIENT_ID, DATE_OF_SERVICE)
+
+message("  Combined GLP-1 dispensings: ", format(nrow(dispensings_glp1), big.mark = ","), " records")
+message("  Unique GLP-1 patients: ", format(n_distinct(dispensings_glp1$PATIENT_ID), big.mark = ","))
+
+# Save combined dataset
+write_parquet(dispensings_glp1, "../output/dispensings_glp1.parquet")
+message("  Saved to: ../output/dispensings_glp1.parquet")
+
+# Calculate stats for log
+stats_glp1_all <- list(
+  medication = "All GLP-1",
+  n_dispensings = nrow(dispensings_glp1),
+  n_patients = n_distinct(dispensings_glp1$PATIENT_ID),
+  dispensings_per_patient = round(nrow(dispensings_glp1) / n_distinct(dispensings_glp1$PATIENT_ID), 1)
+)
+
+log_lines <- c(
+  log_lines,
+  "Combined GLP-1 Dataset:",
+  paste0("  Total dispensing records: ", format(stats_glp1_all$n_dispensings, big.mark = ",")),
+  paste0("  Unique patients: ", format(stats_glp1_all$n_patients, big.mark = ",")),
+  paste0("  Dispensings per patient: ", stats_glp1_all$dispensings_per_patient),
+  paste0("  Output file: ../output/dispensings_glp1.parquet"),
+  ""
+)
+
+# Clean up
+gc()
+
+```
+
+## Summary Statistics
+
+```{r}
+#| label: summary-stats
+
+# Create summary table from collected statistics
+dispensing_summary <- bind_rows(
+  stats_semaglutide,
+  stats_tirzepatide,
+  stats_liraglutide,
+  stats_dulaglutide,
+  stats_glp1_all,
+  stats_sglt2,
+  stats_dpp4,
+  stats_sulfo
+)
+
+print(dispensing_summary)
+
+# Add summary table to log
+log_lines <- c(
+  log_lines,
+  "Summary Table:",
+  ""
+)
+
+for (i in 1:nrow(dispensing_summary)) {
+  log_lines <- c(
+    log_lines,
+    paste0(dispensing_summary$medication[i], ":"),
+    paste0("  Dispensings: ", format(dispensing_summary$n_dispensings[i], big.mark = ",")),
+    paste0("  Patients: ", format(dispensing_summary$n_patients[i], big.mark = ",")),
+    paste0("  Dispensings/patient: ", dispensing_summary$dispensings_per_patient[i]),
+    ""
+  )
+}
+
+# Write log file
+
+writeLines(log_lines, "../output/dispensing_extraction_log.txt")
+
+# Disconnect from Snowflake
+dbDisconnect(con)
+
+```
+
+
+# Save Dispensing Files to Stata
+
+I originally tried to get the discontinuation dates using R, but it was just not possible due to the file size. Could not figure out how to optimize in R, but Stata on the other hand was very efficient. So I converted the files to Stata format. For space, we will delete them after getting the censoring dates later. 
+
+```{r}
+#|label: convert-stata
+library(haven)
+
+dispensings_glp1 <- read_parquet("../output/dispensings_glp1.parquet")
+write_dta(dispensings_glp1, "../output/dispensings_glp1.dta")
+rm(dispensings_glp1)
+
+dispensings_sglt2 <- read_parquet("../output/dispensings_sglt2.parquet")
+write_dta(dispensings_sglt2, "../output/dispensings_sglt2.dta")
+rm(dispensings_sglt2)
+
+dispensings_dpp4 <- read_parquet("../output/dispensings_dpp4.parquet")
+write_dta(dispensings_dpp4, "../output/dispensings_dpp4.dta")
+rm(dispensings_dpp4)
+
+dispensings_sulfo <- read_parquet("../output/dispensings_sulfo.parquet")
+write_dta(dispensings_sulfo, "../output/dispensings_sulfo.dta")
+rm(dispensings_sulfo)
+
+dispensings_semaglutide <- read_parquet("../output/dispensings_semaglutide.parquet")
+write_dta(dispensings_semaglutide, "../output/dispensings_semaglutide.dta")
+rm(dispensings_semaglutide)
+
+dispensings_tirzepatide <- read_parquet("../output/dispensings_tirzepatide.parquet")
+write_dta(dispensings_tirzepatide, "../output/dispensings_tirzepatide.dta")
+rm(dispensings_tirzepatide)
+
+dispensings_liraglutide <- read_parquet("../output/dispensings_liraglutide.parquet")
+write_dta(dispensings_liraglutide, "../output/dispensings_liraglutide.dta")
+rm(dispensings_liraglutide)
+
+dispensings_dulaglutide <- read_parquet("../output/dispensings_dulaglutide.parquet")
+write_dta(dispensings_dulaglutide, "../output/dispensings_dulaglutide.dta")
+rm(dispensings_dulaglutide)
+```

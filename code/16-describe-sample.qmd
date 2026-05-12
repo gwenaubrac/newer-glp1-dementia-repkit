@@ -1,0 +1,349 @@
+---
+title: "Describe Sample - Novel GLP1s vs other classes"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+Create a table of baseline characteristics before weighting. Check the standardized mean differences (SMD) before weighting, after IPTW weighting, and after IPCW + IPCW weighting. 
+
+```{r}
+#### DESCRIBE SAMPLE ####
+
+here::here()
+
+library(dplyr)
+library(magrittr)
+library(table1)
+library(smd)
+
+data <- readRDS("../output/data_novel.rds")
+data1 <- readRDS("../output/data1_novel.rds")
+data2 <- readRDS("../output/data2_novel.rds")
+data3 <- readRDS("../output/data3_novel.rds")
+cov_list <- readRDS("../output/cov_list_novel.rds")
+
+data1$trt <- factor(data1$trt, levels = c(0, 1), labels = c("SGLT2 Inhibitors", "Novel GLP1 Agonists"))
+data2$trt <- factor(data2$trt, levels = c(0, 1), labels = c("DPP4 Inhibitors", "Novel GLP1 Agonists"))
+data3$trt <- factor(data3$trt, levels = c(0, 1), labels = c("Sulfonylureas", "Novel GLP1 Agonists"))
+
+# this function is to only show the rows for cov=1 (to simplify the table)
+render_binary <- function(x, ...) {
+  y <- table1::render.categorical.default(x, ...)
+  if (length(levels(factor(x))) == 2) {
+    y <- tail(y, 1)
+    names(y) <- ""
+  }
+  y
+}
+
+# add formatted labels for covariates
+labels <- c(
+  age = "Age (years)",
+  alcohol = "Alcohol use disorders",
+  cancer = "Cancer",
+  cvd = "Cardiovascular disease",
+  ckd = "Chronic kidney disease",
+  revas = "Coronary revascularization",
+  ampu = "Diabetic amputation",
+  retino = "Diabetic retinopathy",
+  diab_neuro = "Diabetic neuropathy",
+  hypoglyc = "Hypoglycemia",
+  dyslipid = "Dyslipidemia",
+  eskd = "End-stage kidney disease",
+  hf = "Heart failure",
+  hepa = "Hepatic disease",
+  hyper = "Hypertension",
+  ihd = "Ischemic heart disease",
+  nafld = "Non-alcoholic fatty liver disease",
+  pace = "Use of a pacemaker or defibrillator",
+  pvd = "Perivascular disease",
+  vhd = "Ventricular heart disease",
+  edema = "Edema",
+  copd = "COPD",
+  apnea = "Sleep apnea",
+  thyroid = "Thyroid disorders",
+  depression = "Depression",
+  anxiety = "Anxiety",
+  hosp_cat = "Number of hospitalizations",
+  emerg_cat = "Number of emergency service use",
+  statin = "Statins",
+  betablocker = "Betablockers",
+  arb = "Angiotensin receptor inhibitors",
+  thiazide = "Thiazides",
+  ccb = "Calcium channel blockers",
+  aceinhibitor = "ACE inhibitors",
+  insulin = "Insulin",
+  metformin = "Metformin",
+  prop_b_q = "ZIP5-level quintile of proportion with a Bachelor's or higher",
+  gender = "Male",
+  year = "Initation year",
+  bmi_cat = "BMI category",
+  region = "Region",
+  race = "Race and ethnicity",
+  plan_type = "Insurance plan type"
+)
+
+# apply labels to the datasets
+for (var in names(labels)) {
+  label(data[[var]]) <- labels[[var]]
+  label(data1[[var]]) <- labels[[var]]
+  label(data2[[var]]) <- labels[[var]]
+  label(data3[[var]]) <- labels[[var]]
+}
+
+# and define the order in which covariates will be listed in the table:
+cov_list <- c(
+  # Sociodemographic characteristics
+  "age",
+  "gender",
+  "race",
+  "region",
+  "prop_b_q",
+  "plan_type",
+  "year",
+  "bmi_cat",
+  "hosp_cat",
+  "emerg_cat",
+
+  # Comorbidities (alphabetical by label)
+  "alcohol",
+  "anxiety",
+  "cancer",
+  "cvd",
+  "ckd",
+  "copd",
+  "revas",
+  "depression",
+  "ampu",
+  "diab_neuro",
+  "retino",
+  "dyslipid",
+  "edema",
+  "eskd",
+  "hepa",
+  "hf",
+  "hypoglyc",
+  "hyper",
+  "ihd",
+  "nafld",
+  "pvd",
+  "apnea",
+  "thyroid",
+  "pace",
+  "vhd",
+
+  # Concomitant medications
+  "aceinhibitor",
+  "arb",
+  "betablocker",
+  "ccb",
+  "insulin",
+  "metformin",
+  "statin",
+  "thiazide"
+)
+
+
+# make table 1 for entire sample (all med groups)
+tab1_formula <- as.formula(paste("~", paste(cov_list, collapse = " + "), " | index_class"))
+
+tab1_data <- table1(
+  tab1_formula,
+  data = data,
+  overall = c(right = "Total"),
+  caption = "Baseline Characteristics of All Patients",
+  render.categorical = render_binary
+)
+
+tab1_data
+write.table(tab1_data, "../novel_res/tab1.csv", col.names = T, row.names = F, append = F, sep = ",")
+
+# table 1 for specific comparisons:
+tab1_formula_new <- (tab1_formula <- as.formula(paste("~", paste(cov_list, collapse = " + "), " | trt")))
+
+# novel GLP1s vs sglt2
+
+# compute crude and weighted SMDs for each covariate
+compute_smd <- function(var, data, weights = NULL) {
+  round(smd(data[[var]], g = data$trt, w = weights)$estimate, 3)
+}
+
+crude_smd <- sapply(cov_list, compute_smd, data = data1)
+iptw_smd <- sapply(cov_list, compute_smd, data = data1, weights = data1$iptw)
+
+crude_smd_lookup <- setNames(abs(crude_smd), cov_list)
+iptw_smd_lookup <- setNames(abs(iptw_smd),  cov_list)
+
+tab1_data1 <- table1(
+  tab1_formula_new,
+  data = data1,
+  overall = c(right = "Total"),
+  caption = "Baseline Characteristics of Novel GLP1 vs SGLT2 Patients",
+  render.categorical = render_binary,
+  extra.col = list(
+    "Crude SMD" = function(x, vname, ...) crude_smd_lookup[vname],
+    "IPTW SMD" = function(x, vname, ...) iptw_smd_lookup[vname]
+  )
+)
+
+tab1_data1
+write.table(tab1_data1, "../novel_res/tab1_data1.csv", col.names = T, row.names = F, append = F, sep = ",")
+
+
+library(tidysmd)
+
+sink("../novel_res/smd_d1.txt")
+
+cat("=", rep("=", 70), "\n", sep = "")
+cat("STANDARDIZED MEAN DIFFERENCES\n")
+cat("Generated on:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+cat("=", rep("=", 70), "\n\n", sep = "")
+
+# Save the SMD output
+smd_output <- tidy_smd(
+  data1, 
+  cov_list,
+  .group = trt, 
+  .wts = c(iptw, swfinal)
+)
+
+print(smd_output, n = 150)
+
+cat("\n")
+cat("=", rep("=", 70), "\n", sep = "")
+cat("END OF REPORT\n")
+cat("=", rep("=", 70), "\n", sep = "")
+
+sink()
+
+# novel GLP1 vs dpp4
+rm(crude_smd, iptw_smd, crude_smd_lookup, iptw_smd_lookup)
+crude_smd  <- sapply(cov_list, compute_smd, data = data2)
+iptw_smd   <- sapply(cov_list, compute_smd, data = data2, weights = data2$iptw)
+
+crude_smd_lookup <- setNames(abs(crude_smd), cov_list)
+iptw_smd_lookup  <- setNames(abs(iptw_smd),  cov_list)
+
+tab1_data2 <- table1(
+  tab1_formula_new,
+  data = data2,
+  overall = c(right = "Total"),
+  caption = "Baseline Characteristics of Novel GLP1 vs DPP4 Patients",
+  render.categorical = render_binary,
+  extra.col = list(
+    "Crude SMD"  = function(x, vname, ...) crude_smd_lookup[vname],
+    "IPTW SMD"   = function(x, vname, ...) iptw_smd_lookup[vname]
+  )
+)
+
+tab1_data2
+write.table(tab1_data2, "../novel_res/tab1_data2.csv", col.names = T, row.names = F, append = F, sep = ",")
+
+
+sink("../novel_res/smd_d2.txt")
+
+cat("=", rep("=", 70), "\n", sep = "")
+cat("STANDARDIZED MEAN DIFFERENCES\n")
+cat("Generated on:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+cat("=", rep("=", 70), "\n\n", sep = "")
+
+# Save the SMD output
+smd_output <- tidy_smd(
+  data2, 
+  cov_list,
+  .group = trt, 
+  .wts = c(iptw, swfinal)
+)
+
+print(smd_output, n = 150)
+
+cat("\n")
+cat("=", rep("=", 70), "\n", sep = "")
+cat("END OF REPORT\n")
+cat("=", rep("=", 70), "\n", sep = "")
+
+sink()
+
+
+# novel GLP1s vs sulfos
+rm(crude_smd, iptw_smd, crude_smd_lookup, iptw_smd_lookup)
+crude_smd  <- sapply(cov_list, compute_smd, data = data3)
+iptw_smd   <- sapply(cov_list, compute_smd, data = data3, weights = data3$iptw)
+
+crude_smd_lookup <- setNames(abs(crude_smd), cov_list)
+iptw_smd_lookup  <- setNames(abs(iptw_smd),  cov_list)
+
+tab1_data3 <- table1(
+  tab1_formula_new,
+  data = data3,
+  overall = c(right = "Total"),
+  caption = "Baseline Characteristics of Novel GLP1 vs Sulfonylureas Patients",
+  render.categorical = render_binary,
+  extra.col = list(
+    "Crude SMD"  = function(x, vname, ...) crude_smd_lookup[vname],
+    "IPTW SMD"   = function(x, vname, ...) iptw_smd_lookup[vname]
+  )
+)
+
+tab1_data3
+write.table(tab1_data3, "../novel_res/tab1_data3.csv", col.names = T, row.names = F, append = F, sep = ",")
+
+sink("../novel_res/smd_d3.txt")
+
+cat("=", rep("=", 70), "\n", sep = "")
+cat("STANDARDIZED MEAN DIFFERENCES\n")
+cat("Generated on:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+cat("=", rep("=", 70), "\n\n", sep = "")
+
+# Save the SMD output
+smd_output <- tidy_smd(
+  data3, 
+  cov_list,
+  .group = trt, 
+  .wts = c(iptw, swfinal)
+)
+
+print(smd_output, n = 150)
+
+cat("\n")
+cat("=", rep("=", 70), "\n", sep = "")
+cat("END OF REPORT\n")
+cat("=", rep("=", 70), "\n", sep = "")
+
+sink()
+```
+
+
+### FINAL TABLE FOR THE MANUSCRIPT
+
+```{r}
+#### SAVE FINAL TABLE 1 ####
+
+tab1_data1_new <- as.data.frame(tab1_data1)
+colnames(tab1_data1_new) <- c("var", "sglt2", "glp1", "total", "smd", "smd_iptw")
+
+tab1_data2_new <- as.data.frame(tab1_data2)
+colnames(tab1_data2_new) <- c("var", "dpp4", "glp1", "total", "smd", "smd_iptw")
+
+tab1_data3_new <- as.data.frame(tab1_data3)
+colnames(tab1_data3_new) <- c("var", "sulfo", "glp1", "total", "smd", "smd_iptw")
+
+final_tab1 <- data.frame(
+  var = tab1_data1_new$var,
+  glp1 = tab1_data1_new$glp1, 
+  sglt2 = tab1_data1_new$sglt2,
+  smd_sglt2 = tab1_data1_new$smd_iptw,
+  dpp4 = tab1_data2_new$dpp4,
+  smd_dpp4 = tab1_data2_new$smd_iptw,
+  sulfo = tab1_data3_new$sulfo,
+  smd_sulfo = tab1_data3_new$smd_iptw
+)
+
+write.csv(
+  final_tab1,
+  paste0("../novel_res/final_tab1_", Sys.Date(), ".csv"),
+  row.names = FALSE
+)
+```

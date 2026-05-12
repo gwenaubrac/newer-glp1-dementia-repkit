@@ -1,0 +1,95 @@
+---
+title: "IPCW Model - Novel GLP1s vs other classes"
+author: "Gwen Aubrac"
+date: today
+format: html
+---
+
+## Overview
+
+Define study end date, define treatment discontinuation and switch based on censoring dates from program 3b (Stata), and fit IPCW models.
+- Describe overall switching rates and switching patterns (from which to which drug/class)
+- Separate IPCW model for censoring due to switch and censoring due to discontinuation
+- Describe mean time to censoring due to discontinuation or switch
+- Describe IPCW weights overall and by treatment group (important to identify any extreme weights/positivity violations)
+
+```{r}
+#### IPCW WEIGHTS ####
+
+library(dplyr)
+library(magrittr)
+library(haven)
+library(lubridate)
+library(huxtable)
+library(broom)
+
+
+end_date <- ymd(20260101)
+
+here::here()
+
+# create directory to save results in 
+dir.create("../novel_res", recursive = TRUE)
+
+disc_date <- read_dta("../output/disc_date_novel.dta")
+switch_date <- read_dta("../output/switch_date_novel.dta")
+
+data <- readRDS("../output/clean_novel.rds")
+
+data <- data %>%
+  left_join(disc_date, by = "PATIENT_ID") %>%
+  left_join(switch_date, by = "PATIENT_ID")
+
+cov_list <- readRDS("../output/cov_list_novel.rds")
+cov_list
+
+# define discontinuation flag
+# disc = 1 if discontinuation was prior to any other censoring events
+
+# patients who, if they had a switch date, discontinue before switching
+test <- data %>%
+  select(c(PATIENT_ID, index_date, switch_date, disc_date)) %>%
+  filter(is.na(switch_date) | (!is.na(switch_date) & disc_date < switch_date))
+
+# patients who, if they have a dod date, discontinue before dod
+test <- data %>%
+  select(PATIENT_ID, index_date, dod, disc_date) %>%
+  filter(is.na(dod) | (!is.na(dod) & disc_date < dod))
+
+
+# disc flag: if disc occurred prior to switch, dod, and study end
+data <- data %>%
+  mutate(
+    disc = if_else(!is.na(disc_date) &
+                     (is.na(switch_date) | (!is.na(switch_date) & disc_date < switch_date)) &
+                     (is.na(dod) | (!is.na(dod) & disc_date < dod)) &
+                     disc_date < end_date
+                   ,1, 0)
+  )
+
+table(data$disc)
+
+test <- data %>%
+  select(PATIENT_ID, index_date, disc_date, switch_date, dod, disc)
+
+# define switch flag: if switch occurred prior to disc, dod, and study end
+data <- data %>%
+  mutate(
+    switch = if_else(!is.na(switch_date) &
+                     (is.na(disc_date) | (!is.na(disc_date) & switch_date < disc_date)) &
+                     (is.na(dod) | (!is.na(dod) & switch_date < dod)) &
+                     switch_date < end_date
+                   ,1, 0)
+  )
+
+table(data$switch)
+
+# switch types: among people who switched before other censoring events
+data %<>%
+  mutate(switch_type = if_else(switch == 1, switch_type, NA))
+
+library(gtsummary)
+library(dplyr)
+
+# I had to run the next steps in a separate .R file because of issues with sink() to save the model outputs
+```

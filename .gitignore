@@ -1,0 +1,10 @@
+# R
+.Renviron
+.env
+.Rhistory
+.Rdata
+.RDataTmp
+
+# OS
+.DS_Store
+Thumbs.db

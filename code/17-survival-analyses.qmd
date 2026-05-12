@@ -1,0 +1,481 @@
+---
+title: "Survival Analyses - Novel GLP1s vs other classes"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+Perform ITT survival analyses using Cox proportional hazards model with IPTW weights:
+- For multiple outcomes: dementia outcomes and subtypes (all-cause, lewy body, Alzheimer), negative control outcomes, and sentinel measures of dementia (order for neuroimaging, Parkinson's disease, and MCI). For sentinel measures, patients are additionally censored when they experience all-cause dementia. 
+- In ITT, patients are censored at coverage end, study end, follow-up cap (see below), date of death, or occurrence of the outcome.
+- Follow-up starts after 90 days to reduce the influence of early events. Patients with an early event during this window were excluded from the analysis. A negative follow-up means that the patient left the cohort (due to death, end of coverage, end of study, cap of follow-up, occurrence of the event) during that period of first 90 days. Those patients were excluded and did not contribute to the numerator nor denominator.
+
+Perform AT survival analyses using Cox proportional hazards model with IPCW weights: 
+- Patients are censored at ITT date or additionally when they switch or discontinue treatment. 
+- Follow-up starts after 90 days to reduce the influence of early events. 
+
+Follow-up is capped at 2 years (730 days) and this includes the 90 days of follow-up excluded at the start.
+
+Notes on coding: The analyses are done using a loop to analyze all outcomes for all contrasts in one go. The "cohort names" are:
+- data1: novel GLP1 (sema + tirze) vs SGLT2
+- data2: novel GLP1 vs DPP4
+- data3: nvel GLP1 vs sulfo
+
+**Instructions for sensitivity analyses:**
+- Apply entropy balance weighting by changing iptw -> ebal (lines 234 and 365)
+- Apply IPCW weights to per-protocol analysis by changing iptw to swfinal (line 365)
+- Require an additional 90 days of follow-up: filter to keep patients with at leat 90 days of follow-up in ITT and PP analyses (lines 169 and 302). In that analysis, patients who experience the outcome or are otherwise lost to follow-up within 6 months are excluded. 
+- Include early events and patients with <90 days of follow-up: change follow-up to start on index date (line 146). That analysis still requires at least 1 day of follow-up.  
+
+```{r}
+#### LOAD DATA ####
+
+here::here()
+
+library(dplyr)
+library(magrittr)
+library(table1)
+library(lubridate)
+library(survival)
+library(survminer)
+library(tidyr)
+library(broom)
+
+end_date <- ymd(20260101)
+
+data <- readRDS("../output/data_novel.rds")
+data1 <- readRDS("../output/data1_novel.rds")
+data2 <- readRDS("../output/data2_novel.rds")
+data3 <- readRDS("../output/data3_novel.rds")
+cov_list <- readRDS("../output/cov_list_novel.rds")
+
+max_fu <- 730 # truncate follow-up up to 2 years after entry
+
+#### 1. ALL-CAUSE DEMENTIA & SUBTYPES ####
+
+# here, patients will not be censored if they experience all-cause dementia
+# since all-cause dementia or its subtypes are the events of interest
+
+# we are also incorporating the negative control outcomes in this loop
+# since similarly, we would not censor at all-cause dementia for those
+
+# save results from all models
+all_cox_results <- list()
+
+# save follow-up times and event count for each analysis
+followup_times <- data.frame(
+  cohort = NA,
+  approach = NA,
+  outcome = NA,
+  mean = NA,
+  min = NA,
+  max = NA,
+  median = NA,
+  q1 = NA,
+  q3 = NA,
+  n_trt = NA,
+  n_comp = NA,
+  n_events = NA,
+  n_events_trt = NA,
+  n_events_comp = NA
+)
+
+# save proportional hazards assumption test for each model
+cox_ph <- data.frame(
+  cohort = NA,
+  approach = NA,
+  outcome = NA,
+  pvalue = NA
+)
+
+# define outcomes as named within dataset var names:
+# ex: "dementia_allcause" with var names "outcome_dementia_allcause_date" and res will be saved as "dementia_allcause"
+
+dementia_outcomes <- c(
+  # dementia outcomes:
+  "dementia_allcause",
+
+  # negative control outcomes:
+  "appendicitis",
+  "tooth",
+  "bell",
+  "basal"
+)
+
+for (outcome in c(dementia_outcomes)) {
+  
+  for (cohort_name in c("data1", "data2", "data3")) {
+
+    cohort <- get(cohort_name)
+    
+    date_name <- paste0("outcome_", outcome, "_date")
+    
+    
+    if (cohort_name == "data1") {
+      ref <- "SGLT2"
+      index <- "Semaglutide/Tirzepatide"
+    } else if (cohort_name == "data2") {
+      ref <- "DPP4"
+      index <- "Semaglutide/Tirzepatide"
+    } else if (cohort_name == "data3") {
+      ref <- "Sulfonylureas"
+      index <- "Semaglutide/Tirzepatide"
+    }
+
+    
+    ### ITT APPROACH ###
+    
+    # describe follow-up (ITT)
+    cohort$study_end <- end_date
+    
+    cohort$itt_exit_date <- pmin(
+      cohort$dod, # date of death
+      cohort$cov_end, # end of coverage
+      cohort$study_end, # end of study
+      cohort$index_date + max_fu, 
+      na.rm = TRUE
+    )
+    
+    summary(cohort$itt_exit_date)
+
+    # now we are adding 90 days to index date to start follow up at 90 days
+    # and reduce the influence of early events (likely caused by confounding by indication/reverse causality)
+    cohort$f_up_start <- cohort$index_date + 90
+    
+    # for sensitivity analysis where start follow up immediately: 
+    # cohort$f_up_start <- cohort$index_date
+
+    # create indicator for itt_event
+    # no event if no date of event or if occurred after ITT exit
+    # !!sym(date_name) takes the date for the event being analyzed in this loop
+
+    cohort %<>%
+      mutate (itt_event = if_else(!is.na(!!sym(date_name)) & !!sym(date_name) < itt_exit_date & !!sym(date_name) >= f_up_start, 1, 0),
+              itt_event_date = if_else(itt_event == 1, !!sym(date_name), NA))
+    
+    table(cohort$itt_event)
+    
+    # update itt exit date if there was an event
+    # so that follow-up additionally ends at event occurrence
+    cohort %<>%
+      mutate(itt_exit_date = if_else(itt_event == 1, itt_event_date, itt_exit_date))
+    
+    cohort$itt_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$itt_exit_date)), 'days')
+    summary(cohort$itt_follow_up)
+
+    cohort %<>% filter(itt_follow_up>0) 
+    
+    # sensitivity analysis requiring an additional 90 days of follow-up: 
+    # cohort %<>% filter(itt_follow_up>=90) 
+
+    # fill in info on follow-up
+    followup_times <- rbind(
+      followup_times,
+      data.frame(
+        cohort = cohort_name,
+        approach = "itt",
+        outcome = outcome,
+        mean = mean(cohort$itt_follow_up),
+        min = min(cohort$itt_follow_up),
+        max = max(cohort$itt_follow_up),
+        median = median(cohort$itt_follow_up),
+        q1 = quantile(cohort$itt_follow_up, 0.25),
+        q3 = quantile(cohort$itt_follow_up, 0.75),
+        n_trt = sum(cohort$trt==1),
+        n_comp = sum(cohort$trt==0),
+        n_events = sum(cohort$itt_event),
+        n_events_trt = sum(cohort$itt_event[cohort$trt==1]),
+        n_events_comp = sum(cohort$itt_event[cohort$trt==0])
+      )
+    )
+    
+    
+    # fit survival models
+    # crude ITT model: 
+    cox_mod_itt_crude <- coxph(Surv(itt_follow_up, itt_event) ~ trt, 
+                         data = cohort, 
+                         cluster = PATIENT_ID, 
+                         robust = TRUE)
+
+    coxph_p <- cox.zph(cox_mod_itt_crude)$table["trt", "p"]
+    
+    cox_ph <- rbind(
+      cox_ph,
+      data.frame(
+        cohort = cohort_name,
+        approach = "itt crude",
+        outcome = outcome,
+        pvalue = coxph_p
+      )
+    )
+    
+    cox_mod_itt_res_crude <- tidy(cox_mod_itt_crude, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(
+        cohort = cohort_name,
+        outcome = outcome,
+        approach = "itt_crude"
+      ) %>%
+      select(cohort, outcome, approach, term, 
+             hr = estimate, ci_lower = conf.low, ci_upper = conf.high, 
+             pvalue = p.value)
+    
+    
+    all_cox_results[[paste(outcome, cohort_name, "itt_crude", sep = "_")]] <- cox_mod_itt_res_crude
+    
+    km_curve_itt_crude <- survfit(Surv(itt_follow_up, itt_event) ~ trt, 
+                            data = cohort)
+    
+    
+    
+    
+    # stabilized IPTW weighted model:
+    cox_mod_itt <- coxph(Surv(itt_follow_up, itt_event) ~ trt, 
+                         data = cohort, 
+                         weights = siptw, # change to ebal for entropy balancing weights (sensitivity analysis)
+                         cluster = PATIENT_ID, 
+                         robust = TRUE)
+
+    coxph_p <- cox.zph(cox_mod_itt)$table["trt", "p"]
+    
+    cox_ph <- rbind(
+      cox_ph,
+      data.frame(
+        cohort = cohort_name,
+        approach = "itt IPTW",
+        outcome = outcome,
+        pvalue = coxph_p
+      )
+    )
+
+    cox_mod_itt_res <- tidy(cox_mod_itt, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(
+        cohort = cohort_name,
+        outcome = outcome,
+        approach = "itt"
+      ) %>%
+      select(cohort, outcome, approach, term, 
+             hr = estimate, ci_lower = conf.low, ci_upper = conf.high, 
+             pvalue = p.value)
+    
+    
+    all_cox_results[[paste(outcome, cohort_name, "itt", sep = "_")]] <- cox_mod_itt_res
+    
+    
+    
+    
+    
+    ### PER PROTOCOL APPROACH ###
+    
+    # describe follow-up (PP)
+    # same as above, but additionally censoring at switch and disc
+    cohort$pp_exit_date <- pmin(
+      cohort$dod,
+      cohort$cov_end,
+      cohort$study_end,
+      cohort$switch_date,
+      cohort$disc_date,
+      cohort$index_date + max_fu,
+      na.rm = TRUE
+    )
+    
+    summary(cohort$pp_exit_date)
+    
+    # create indicator for pp_event
+    # no event if no date of event or if occurred after PP exit
+    cohort %<>%
+      mutate (pp_event = if_else(!is.na(!!sym(date_name)) & !!sym(date_name) < pp_exit_date & !!sym(date_name) >= f_up_start, 1, 0),
+              pp_event_date = if_else(pp_event == 1, !!sym(date_name), NA))
+    
+    table(cohort$pp_event)
+    
+    # update pp exit date if there was an event
+    # so that follow-up additionally ends at event occurrence
+    cohort %<>%
+      mutate(pp_exit_date = if_else(pp_event == 1, pp_event_date, pp_exit_date))
+    
+    
+    cohort$pp_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$pp_exit_date)), 'days')
+    summary(cohort$pp_follow_up)
+
+    cohort %<>% filter(pp_follow_up>0)
+
+    # sensitivity analysis requiring an additional 90 days of follow-up: 
+    # cohort %<>% filter(pp_follow_up>=90) 
+  
+    
+    # fill in info on follow-up
+    followup_times <- rbind(
+      followup_times,
+      data.frame(
+        cohort = cohort_name,
+        approach = "pp",
+        outcome = outcome,
+        mean = mean(cohort$pp_follow_up),
+        min = min(cohort$pp_follow_up),
+        max = max(cohort$pp_follow_up),
+        median = median(cohort$pp_follow_up),
+        q1 = quantile(cohort$pp_follow_up, 0.25),
+        q3 = quantile(cohort$pp_follow_up, 0.75),
+        n_trt = sum(cohort$trt==1),
+        n_comp = sum(cohort$trt==0),
+        n_events = sum(cohort$pp_event),
+        n_events_trt = sum(cohort$pp_event[cohort$trt==1]),
+        n_events_comp = sum(cohort$pp_event[cohort$trt==0])
+      )
+    )
+    
+    
+    # fit survival models
+    # crude model:
+    cox_mod_pp_crude <- coxph(Surv(pp_follow_up, pp_event) ~ trt, 
+                        data = cohort,
+                        cluster = PATIENT_ID, 
+                        robust = TRUE)
+
+    coxph_p <- cox.zph(cox_mod_pp_crude)$table["trt", "p"]
+    
+    cox_ph <- rbind(
+      cox_ph,
+      data.frame(
+        cohort = cohort_name,
+        approach = "pp crude",
+        outcome = outcome,
+        pvalue = coxph_p
+      )
+    )
+    
+    cox_mod_pp_res_crude <- tidy(cox_mod_pp_crude, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(
+        cohort = cohort_name,
+        outcome = outcome,
+        approach = "pp_crude"
+      ) %>%
+      select(cohort, outcome, approach, term, 
+             hr = estimate, ci_lower = conf.low, ci_upper = conf.high, 
+             pvalue = p.value)
+    
+    
+    all_cox_results[[paste(outcome, cohort_name, "pp_crude", sep = "_")]] <- cox_mod_pp_res_crude
+    
+
+    
+    # stabilized IPTW:
+    cox_mod_pp <- coxph(Surv(pp_follow_up, pp_event) ~ trt, 
+                            data = cohort, 
+                            weights = siptw, # change to ebal (IPTW only) or ebalfinal (ebal + IPCW) for sensitivity analysis using entropy balancing weights
+                            # and change to swfinal for IPTW + IPCW weighting
+                            cluster = PATIENT_ID, 
+                            robust = TRUE)
+
+    coxph_p <- cox.zph(cox_mod_pp)$table["trt", "p"]
+    
+    cox_ph <- rbind(
+      cox_ph,
+      data.frame(
+        cohort = cohort_name,
+        approach = "pp IPTW+IPCW",
+        outcome = outcome,
+        pvalue = coxph_p
+      )
+    )
+    
+    cox_mod_pp_res <- tidy(cox_mod_pp, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(
+        cohort = cohort_name,
+        outcome = outcome,
+        approach = "pp"
+      ) %>%
+      select(cohort, outcome, approach, term, 
+             hr = estimate, ci_lower = conf.low, ci_upper = conf.high, 
+             pvalue = p.value)
+    
+    
+    all_cox_results[[paste(outcome, cohort_name, "pp", sep = "_")]] <- cox_mod_pp_res
+    
+    
+  }
+}
+
+
+rm(cohort, cohort_name, outcome)
+
+
+#### SAVE MODEL RESULTS ####
+
+write.csv(
+  followup_times,
+  paste0("../novel_res/followup_times_", Sys.Date(), ".csv"),
+  row.names = FALSE
+)
+
+cox_ph %<>%
+  mutate(
+    flag = if_else(pvalue<0.05, 1, 0)
+  )
+
+write.csv(
+  cox_ph,
+  paste0("../novel_res/cox_ph_", Sys.Date(), ".csv"),
+  row.names = FALSE
+)
+
+summary_table <- bind_rows(all_cox_results)
+
+summary_table <- summary_table %>%
+  mutate(across(where(is.numeric), ~round(., 2)))
+
+
+write.csv(
+  summary_table,
+  paste0("../novel_res/all_cox_results_", Sys.Date(), ".csv"),
+  row.names = FALSE
+)
+
+saveRDS(
+  summary_table,
+  paste0("../novel_res/all_cox_results_novel_", Sys.Date(), ".rds")
+)
+
+```
+
+## FINAL TABLE FOR MANUSCRIPT 
+
+```{r}
+#### SAVE FINAL TABLE 2 ####
+
+final_tab2_data1 <- summary_table %>%
+  filter(cohort == "data1") %>% # keep only results for GLP1 vs SGLT2
+  filter(outcome == "dementia_allcause") %>%
+  filter(approach == "itt" | approach == "pp") %>% # keep only adjusted estimates
+  mutate(estimate = paste0(hr, " (", ci_lower, ", ", ci_upper, ")")) %>% # format estimate and CI into same cell
+  select(approach, estimate)
+
+final_tab2_data2 <- summary_table %>%
+  filter(cohort == "data2") %>% # keep only results for GLP1 vs DPP4
+  filter(outcome == "dementia_allcause") %>%
+  filter(approach == "itt" | approach == "pp") %>% # keep only adjusted estimates
+  mutate(estimate = paste0(hr, " (", ci_lower, ", ", ci_upper, ")")) %>% # format estimate and CI into same cell
+  select(approach, estimate)
+
+final_tab2_data3 <- summary_table %>%
+  filter(cohort == "data3") %>% # keep only results for GLP1 vs sulfo
+  filter(outcome == "dementia_allcause") %>%
+  filter(approach == "itt" | approach == "pp") %>% # keep only adjusted estimates
+  mutate(estimate = paste0(hr, " (", ci_lower, ", ", ci_upper, ")")) %>% # format estimate and CI into same cell
+  select(approach, estimate)
+
+final_tab2 <- data.frame(
+  glp1_vs_sglt2 = c(final_tab2_data1$estimate[final_tab2_data1$approach=="itt"], final_tab2_data1$estimate[final_tab2_data1$approach=="pp"]),
+  glp1_vs_dpp4 = c(final_tab2_data2$estimate[final_tab2_data2$approach=="itt"], final_tab2_data2$estimate[final_tab2_data2$approach=="pp"]),
+  glp1_vs_sulfo = c(final_tab2_data3$estimate[final_tab2_data3$approach=="itt"], final_tab2_data3$estimate[final_tab2_data3$approach=="pp"])
+)
+
+row.names(final_tab2) <- c("ITT", "PP")
+
+write.csv(
+  final_tab2,
+  paste0("../novel_res/final_tab2_", Sys.Date(), ".csv"),
+  row.names = FALSE
+)
+```

@@ -1,0 +1,318 @@
+---
+title: "Save Plots - Novel GLP1s vs other classes"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+Save KM curves and forest plot for outcome. Update legends, labels, and sizing as needed. 
+
+## KM Curves
+
+```{r}
+library(here)
+library(dplyr)
+library(magrittr)
+library(survival)
+library(survminer)
+library(forestplot)
+library(tidyverse)
+library(gt)
+library(patchwork)
+
+here::here()
+
+outcome <- "dementia_allcause"
+
+# repeat this for "data1", "data2", and "data3" to get the curves for each comparison
+cohort_name <- "data1"
+
+end_date <- ymd(20260101)
+
+data <- readRDS("../output/data_novel.rds")
+data1 <- readRDS("../output/data1_novel.rds")
+data2 <- readRDS("../output/data2_novel.rds")
+data3 <- readRDS("../output/data3_novel.rds")
+cov_list <- readRDS("../output/cov_list_novel.rds")
+
+max_fu <- 730
+
+cohort <- get(cohort_name)
+date_name <- paste0("outcome_", outcome, "_date")
+
+if (cohort_name == "data1") {
+  ref <- "SGLT2"
+  index <- "Semaglutide/Tirzepatide"
+} else if (cohort_name == "data2") {
+  ref <- "DPP4"
+  index <- "Semaglutide/Tirzepatide"
+} else if (cohort_name == "data3") {
+  ref <- "Sulfonylureas"
+  index <- "Semaglutide/Tirzepatide"
+}
+
+cohort$study_end <- end_date
+
+cohort$itt_exit_date <- pmin(cohort$dod,
+                             # date of death
+                             cohort$cov_end,
+                             # end of coverage
+                             cohort$study_end,
+                             # end of study
+                             cohort$index_date + max_fu,
+                             na.rm = TRUE)
+
+cohort$f_up_start <- cohort$index_date + 90
+
+cohort %<>%
+  mutate (
+    itt_event = if_else(
+      !is.na(!!sym(date_name)) &
+        !!sym(date_name) < itt_exit_date &
+        !!sym(date_name) >= f_up_start,
+      1,
+      0
+    ),
+    itt_event_date = if_else(itt_event == 1, !!sym(date_name), NA)
+  )
+
+cohort %<>%
+  mutate(itt_exit_date = if_else(itt_event == 1, itt_event_date, itt_exit_date))
+
+cohort$itt_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$itt_exit_date)), 'days')
+
+cohort %<>% filter(itt_follow_up > 0)
+
+cohort$pp_exit_date <- pmin(
+  cohort$dod,
+  cohort$cov_end,
+  cohort$study_end,
+  cohort$switch_date,
+  cohort$disc_date,
+  cohort$index_date + max_fu,
+  na.rm = TRUE
+)
+
+cohort %<>%
+  mutate (
+    pp_event = if_else(
+      !is.na(!!sym(date_name)) &
+        !!sym(date_name) < pp_exit_date &
+        !!sym(date_name) >= f_up_start,
+      1,
+      0
+    ),
+    pp_event_date = if_else(pp_event == 1, !!sym(date_name), NA)
+  )
+
+cohort %<>%
+  mutate(pp_exit_date = if_else(pp_event == 1, pp_event_date, pp_exit_date))
+
+
+cohort$pp_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$pp_exit_date)), 'days')
+
+cohort %<>% filter(pp_follow_up > 0)
+
+
+#### CUMULATIVE INCIDENCE CURVES ####
+
+# for ITT plot: 
+km_fit <- survfit(Surv(itt_follow_up, itt_event) ~ trt, data = cohort, weights = siptw)
+
+p <- ggsurvplot(km_fit,
+                data = cohort,
+                fun = "event",
+                pval = TRUE,
+                conf.int = FALSE,
+                risk.table = TRUE,
+                xlab = "Time (days)",
+                ylab = "Cumulative Incidence",
+                title = "Cumulative Incidence of All-Cause Dementia",
+                subtitle = "Intention-to-Treat Approach with IPTW", # adjust 
+                legend.title = "Treatment",
+                legend.labs = c(ref, index),
+                palette = c("#009E73", "#CC79A7"),
+                ylim = c(0, 0.03)) # adjust scale as needed
+
+p
+
+pdf(paste0("../novel_res/km_itt_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+print(p)
+dev.off()
+dev.off()
+rm(km_fit, p)
+
+
+# fot PP plot:
+km_fit <- survfit(Surv(pp_follow_up, pp_event) ~ trt, data = cohort, weights = swfinal)
+
+p <- ggsurvplot(km_fit,
+                data = cohort,
+                fun = "event",
+                pval = TRUE,
+                conf.int = FALSE,
+                risk.table = TRUE,
+                xlab = "Time (days)",
+                ylab = "Cumulative Incidence",
+                title = "Cumulative Incidence of All-Cause Dementia",
+                subtitle = "Per-Protocol Approach with IPTW + IPCW", # adjust 
+                legend.title = "Treatment",
+                legend.labs = c(ref, index),
+                palette = c("#009E73", "#CC79A7"),
+                ylim = c(0, 0.03)) # adjust scale as needed
+
+p
+pdf(paste0("../novel_res/km_pp_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+print(p)
+dev.off()
+dev.off()
+rm(km_fit, p)
+```
+
+
+# FOREST PLOT
+```{r}
+#### FOREST PLOT ####
+# results are dated, so you can define the dates for the results here:
+date <- "2026-05-07"
+
+## load results
+summary_table <- readRDS(paste0("../novel_res/all_cox_results_novel_", date, ".rds"))
+followup_times <- read.csv(paste0("../novel_res/followup_times_", date, ".csv"))
+
+followup_times %<>%
+  mutate(
+    perc_trt = round(n_events_trt/n_trt * 100, 2),
+    perc_comp = round(n_events_comp/n_comp * 100, 2)
+  )
+
+followup_times$count_label_trt <- paste0(followup_times$n_events_trt, " (", followup_times$perc_trt, "%)")
+followup_times$count_label_comp <- paste0(followup_times$n_events_comp, " (", followup_times$perc_comp, "%)")
+
+summary_table %<>%
+  left_join(followup_times, by = c("cohort" = "cohort", "approach" = "approach", "outcome" = "outcome"))
+
+forest_data <- summary_table %>%
+  filter(outcome == "dementia_allcause" & (approach == "itt")) %>%
+  mutate(
+    Comparator = case_when(
+      cohort == "data1" & approach == "itt" ~ "a) SGLT2",
+      cohort == "data2" & approach == "itt" ~ "b) DPP4",
+      cohort == "data3" & approach == "itt" ~ "c) SU"
+    )
+  )
+
+# shared data frame with formatted labels (used by p_name, p_hr, p_right_pval)
+res_plot <- forest_data %>%
+  mutate(across(c(hr, ci_lower, ci_upper), ~str_pad(round(.x, 2), width=4, pad="0", side="right")),
+         estimate_lab = paste0(hr, " (", ci_lower, "-", ci_upper, ")")) %>%
+  mutate(pvalue = case_when(
+    pvalue < .01 ~ "<0.01",
+    TRUE ~ str_pad(as.character(round(pvalue, 2)), width=4, pad="0", side="right")
+  )) %>%
+  mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2", "b) DPP4", "c) SU"))) %>%
+  bind_rows(data.frame(
+    Comparator = factor("Comparator"),
+    estimate_lab = "HR (95% CI)",
+    pvalue = "p-value",
+    count_label_trt = "Crude Events GLP1",
+    count_label_comp = "Crude Events Comparator"
+  ))
+
+
+## Comparator name
+p_name <-
+  res_plot %>%
+  ggplot(aes(y = Comparator)) +
+  geom_text(aes(x = 0, label = Comparator), hjust = 0,
+            fontface = ifelse(res_plot$Comparator == "Comparator", "bold", "plain")) +
+  theme_void() +
+  coord_cartesian(xlim = c(0, 1))
+
+## Event count (%)
+p_count_trt <-
+  res_plot %>%
+  ggplot(aes(y = Comparator)) +
+  geom_text(
+    aes(
+      x = 0,
+      label = count_label_trt,
+      fontface = ifelse(count_label_trt == "Crude Events GLP1", "bold", "plain")
+    ),
+    hjust = 0
+  ) +
+  theme_void() +
+  coord_cartesian(xlim = c(0, 1))
+
+p_count_comp <-
+  res_plot %>%
+  ggplot(aes(y = Comparator)) +
+  geom_text(
+    aes(
+      x = 0,
+      label = count_label_comp,
+      fontface = ifelse(count_label_comp == "Crude Events Comparator", "bold", "plain")
+    ),
+    hjust = 0
+  ) +
+  theme_void() +
+  coord_cartesian(xlim = c(0,1))
+
+## Forest plot lines
+p_line <-
+  forest_data %>%
+  mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2", "b) DPP4", "c) SU"))) %>%
+  ggplot(aes(y = Comparator)) +
+  theme_classic() +
+  geom_point(aes(x = hr), shape = 15, size = 3) +
+  geom_linerange(aes(xmin = ci_lower, xmax = ci_upper)) +
+  labs(x = "HR") +
+  scale_x_log10(limits = c(0.25, 2)) + 
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  annotate("text", x = 0.7, y = 0.5, label = "GLP1 protective") +
+  annotate("text", x = 1.4, y = 0.5, label = "GLP1 harmful") +
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "bottom")
+
+
+## HR (95% CI) labels
+p_hr <-
+  res_plot %>%
+  ggplot(aes(y = Comparator)) +
+  geom_text(aes(x = 0, label = estimate_lab), hjust = 0,
+            fontface = ifelse(res_plot$estimate_lab == "HR (95% CI)", "bold", "plain")) +
+  theme_void() +
+  coord_cartesian(xlim = c(0, 1))
+
+
+## P-value
+p_pval <-
+  res_plot %>%
+  ggplot(aes(y = Comparator)) +
+  geom_text(aes(x = 0, label = pvalue), hjust = 0,
+            fontface = ifelse(res_plot$pvalue == "p-value", "bold", "plain")) +
+  theme_void() +
+  coord_cartesian(xlim = c(0, 1))
+
+
+# layout
+layout <- c(
+  area(t = 0, l = 0,  b = 30, r = 3),   # p_name
+  area(t = 0, l = 3,  b = 30, r = 7),   # p_count_trt
+  area(t = 0, l = 7,  b = 30, r = 11),   # p_count_comp
+  area(t = 1, l = 11,  b = 30, r = 26),  # p_line
+  area(t = 0, l = 26, b = 30, r = 30),  # p_hr
+  area(t = 0, l = 30, b = 30, r = 32)   # p_pval
+)
+
+# final plot arrangement
+p_name + p_count_trt + p_count_comp + p_line + p_hr + p_pval +
+  plot_layout(design = layout)
+
+## save final figure
+ggsave("combo_forest_plot_novel.pdf", width=16, height=4, dpi=300)
+```

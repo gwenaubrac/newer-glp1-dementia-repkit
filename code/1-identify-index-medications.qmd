@@ -1,0 +1,342 @@
+---
+title: "Identify Index Medications and Export NDC Codes"
+author: "Gwen Aubrac"
+format: html
+---
+
+## Overview
+
+This notebook identifies index medications (GLP-1/GIP agonists and comparators) from the Sentinel drug reference database and exports their NDC codes for use in subsequent programs.
+
+**Index medications:**
+- GLP-1/GIP agonists: semaglutide and tirzepatide (liraglutide and dulaglutide are also included in the code list to later exclude prior use of other GLP-1 agonists)
+- Comparators: SGLT2 inhibitors, DPP-4 inhibitors, sulfonylureas
+
+**Outputs:**
+- Separate CSV files with NDC11 codes for each medication
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+# Load packages
+library(tidyverse)
+library(here)
+library(DBI)
+library(odbc)
+library(dplyr)
+library(dbplyr)
+library(stringr)
+
+# Set working directory to wherever this file is for you
+here::here()
+
+# Set up connection to Snowflake
+con <- dbConnect(
+  odbc::odbc(),
+  dsn = Sys.getenv("dsn")
+)
+
+# create output directory
+if (!dir.exists("../output")) {
+  dir.create("../output")
+}
+
+```
+
+
+## Get NDCs for Index Medications
+
+```{r}
+#| label: get-ndcs
+
+DBI::dbExecute(con, "USE DATABASE SENTINEL_COMMON")
+DBI::dbExecute(con, "USE SCHEMA SENTINEL_REFERENCE")
+
+drug_reference_tbl <- tbl(
+  con,
+  "DRUG_REFERENCE"
+)
+
+drug_reference_flagged <- drug_reference_tbl %>%
+  arrange(PRECISE_GENERIC_NAME, PRODUCT_NAME) %>%
+  mutate(
+
+    # Individual GLP-1/GIP medications
+    semaglutide = case_when(
+      PRECISE_GENERIC_NAME %like% "%SEMAGLUTIDE%" | PRODUCT_NAME %like% "%SEMAGLUTIDE%" ~ 1L,
+      PRODUCT_NAME %in% c("SEMAGLUTIDE", "OZEMPIC", "RYBELSUS", "WEGOVY") ~ 1L,
+      TRUE ~ 0L
+    ),
+    tirzepatide = case_when(
+      PRECISE_GENERIC_NAME %like% "%TIRZEPATIDE%" | PRODUCT_NAME %like% "%TIRZEPATIDE%" ~ 1L,
+      PRODUCT_NAME %in% c("TIRZEPATIDE", "MOUNJARO", "ZEPBOUND") ~ 1L,
+      TRUE ~ 0L
+    ),
+    liraglutide = case_when(
+      PRECISE_GENERIC_NAME %like% "%LIRAGLUTIDE%" | PRODUCT_NAME %like% "%LIRAGLUTIDE%" ~ 1L,
+      PRODUCT_NAME %in% c("LIRAGLUTIDE", "VICTOZA", "SAXENDA") ~ 1L,
+      TRUE ~ 0L
+    ),
+    dulaglutide = case_when(
+      PRECISE_GENERIC_NAME %like% "%DULAGLUTIDE%" | PRODUCT_NAME %like% "%DULAGLUTIDE%" ~ 1L,
+      PRODUCT_NAME %in% c("DULAGLUTIDE", "TRULICITY") ~ 1L,
+      TRUE ~ 0L
+    ),
+
+    # GLP-1/GIP agonists as a class (combine individual medications)
+    glp1 = case_when(
+      semaglutide == 1L | tirzepatide == 1L | liraglutide == 1L | dulaglutide == 1L ~ 1L,
+      TRUE ~ 0L
+    ),
+
+    # SGLT2 inhibitors (comparator)
+    sglt2 = case_when(
+      PRECISE_GENERIC_NAME %like% "%BEXAGLIFLOZIN%" | PRODUCT_NAME %like% "%BEXAGLIFLOZIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%CANAGLIFLOZIN%" | PRODUCT_NAME %like% "%CANAGLIFLOZIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%DAPAGLIFLOZIN%" | PRODUCT_NAME %like% "%DAPAGLIFLOZIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%EMPAGLIFLOZIN%" | PRODUCT_NAME %like% "%EMPAGLIFLOZIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%ERTUGLIFLOZIN%" | PRODUCT_NAME %like% "%ERTUGLIFLOZIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%SOTAGLIFLOZIN%" | PRODUCT_NAME %like% "%SOTAGLIFLOZIN%" ~ 1L,
+      PRODUCT_NAME %in% c("BEXAGLIFLOZIN", "CANAGLIFLOZIN", "DAPAGLIFLOZIN", "EMPAGLIFLOZIN", 
+                          "ERTUGLIFLOZIN", "SOTAGLIFLOZIN",
+                          "BRENZAVVY", "INVOKANA", "FARXIGA", "JARDIANCE", "STEGLATRO", "INPEFA") ~ 1L,
+      TRUE ~ 0L
+    ),
+
+    # DPP-4 inhibitors (comparator)
+    dpp4 = case_when(
+      PRECISE_GENERIC_NAME %like% "%SITAGLIPTIN%" | PRODUCT_NAME %like% "%SITAGLIPTIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%SAXAGLIPTIN%" | PRODUCT_NAME %like% "%SAXAGLIPTIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%LINAGLIPTIN%" | PRODUCT_NAME %like% "%LINAGLIPTIN%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%ALOGLIPTIN%" | PRODUCT_NAME %like% "%ALOGLIPTIN%" ~ 1L,
+      PRODUCT_NAME %in% c("SITAGLIPTIN", "SAXAGLIPTIN", "LINAGLIPTIN", "ALOGLIPTIN",
+                          "JANUVIA", "ONGLYZA", "TRADJENTA", "NESINA") ~ 1L,
+      TRUE ~ 0L
+    ),
+
+    # Sulfonylureas (comparator)
+    sulfonylurea = case_when(
+      PRECISE_GENERIC_NAME %like% "%GLIPIZIDE%" | PRODUCT_NAME %like% "%GLIPIZIDE%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%GLYBURIDE%" | PRODUCT_NAME %like% "%GLYBURIDE%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%GLIMEPIRIDE%" | PRODUCT_NAME %like% "%GLIMEPIRIDE%" ~ 1L,
+      PRECISE_GENERIC_NAME %like% "%GLICLAZIDE%" | PRODUCT_NAME %like% "%GLICLAZIDE%" ~ 1L,
+      PRODUCT_NAME %in% c("GLIPIZIDE", "GLYBURIDE", "GLIMEPIRIDE", "GLICLAZIDE",
+                          "GLUCOTROL", "DIABETA", "MICRONASE", "AMARYL", "DIAMICRON") ~ 1L,
+      TRUE ~ 0L
+    )
+  )
+
+# Collect the drug reference data
+drug_reference <- drug_reference_flagged %>%
+  select(CODE, PRECISE_GENERIC_NAME, PRODUCT_NAME, KH_THERAPEUTIC_CLASS_ARRAY, 
+         glp1, semaglutide, tirzepatide, liraglutide, dulaglutide,
+         sglt2, dpp4, sulfonylurea) %>%
+  filter(glp1 == 1 | sglt2 == 1 | dpp4 == 1 | sulfonylurea == 1) %>%
+  collect()
+
+# Check counts for each medication class
+drug_reference %>%
+  summarise(
+    glp1_count = sum(glp1),
+    semaglutide_count = sum(semaglutide),
+    tirzepatide_count = sum(tirzepatide),
+    liraglutide_count = sum(liraglutide),
+    dulaglutide_count = sum(dulaglutide),
+    sglt2_count = sum(sglt2),
+    dpp4_count = sum(dpp4),
+    sulfonylurea_count = sum(sulfonylurea)
+  )
+
+# Preview medications by class
+drug_reference %>%
+  filter(glp1 == 1) %>%
+  select(CODE, PRECISE_GENERIC_NAME, PRODUCT_NAME, KH_THERAPEUTIC_CLASS_ARRAY) %>%
+  arrange(PRECISE_GENERIC_NAME)
+
+```
+
+## Manually Remove NDC Codes that Correspond to Multiple Classes
+
+This step removes NDC codes that correspond to multiple drug classes (more details on this later). You can go back to this step to add more medications as needed. 
+
+```{r}
+#| label: remove-multi-ndcs
+
+drug_reference <- drug_reference %>%
+  filter(PRODUCT_NAME != "GLYXAMBI" & PRODUCT_NAME != "QTERN" & PRODUCT_NAME != "STEGLUJAN" & PRODUCT_NAME != "TRIJARDY XR")
+```
+
+## Export NDC Codes
+
+```{r}
+#| label: export-ndcs
+
+# Export NDC codes separately for each medication class and individual GLP-1 medications
+
+# Individual GLP-1 medications
+drug_reference %>%
+  filter(semaglutide == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/semaglutide_ndcs.csv")
+
+drug_reference %>%
+  filter(tirzepatide == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/tirzepatide_ndcs.csv")
+
+drug_reference %>%
+  filter(liraglutide == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/liraglutide_ndcs.csv")
+
+drug_reference %>%
+  filter(dulaglutide == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/dulaglutide_ndcs.csv")
+
+# All GLP-1 medications combined
+drug_reference %>%
+  filter(glp1 == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/glp1_ndcs.csv")
+
+# Comparator classes
+drug_reference %>%
+  filter(sglt2 == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/sglt2_ndcs.csv")
+
+drug_reference %>%
+  filter(dpp4 == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/dpp4_ndcs.csv")
+
+drug_reference %>%
+  filter(sulfonylurea == 1) %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  select(
+    NDC11,
+    GENERIC_NAME = PRECISE_GENERIC_NAME,
+    PRODUCT_NAME,
+    THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
+  ) %>%
+  write_csv("../output/sulfonylurea_ndcs.csv")
+```
+
+Here we check whether there are NDC codes that correspond to multiple drug classes. If any are found, there will be a warning and you can check which NDC codes, and product names were flagged in the "ndc_overlap_summary.txt". Please check the log to see if there are any NDCs that correspond to multiple medications. If so, please exclude them from the NDC lists, which will later be used to identify patients for inclusion in the cohort. 
+
+```{r}
+# Check for duplicate NDC11 codes across medication classes
+ndc_overlap <- drug_reference %>%
+  mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+  group_by(NDC11) %>%
+  summarise(
+    n_classes = sum(glp1) + sum(sglt2) + sum(dpp4) + sum(sulfonylurea),
+    in_glp1 = max(glp1),
+    in_sglt2 = max(sglt2),
+    in_dpp4 = max(dpp4),
+    in_sulfonylurea = max(sulfonylurea),
+    .groups = "drop"
+  ) %>%
+  filter(n_classes > 1)
+
+if (nrow(ndc_overlap) > 0) {
+  warning("Found ", nrow(ndc_overlap), " NDC codes assigned to multiple medication classes")
+  
+  # Get detailed information about overlapping NDCs
+  overlap_details <- drug_reference %>%
+    mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%
+    filter(NDC11 %in% ndc_overlap$NDC11) %>%
+    select(NDC11, PRODUCT_NAME, PRECISE_GENERIC_NAME,
+           semaglutide, tirzepatide, liraglutide, dulaglutide,
+           sglt2, dpp4, sulfonylurea) %>%
+    pivot_longer(
+      cols = c(semaglutide, tirzepatide, liraglutide, dulaglutide, sglt2, dpp4, sulfonylurea),
+      names_to = "medication_class",
+      values_to = "flag"
+    ) %>%
+    filter(flag == 1) %>%
+    group_by(NDC11, PRODUCT_NAME, PRECISE_GENERIC_NAME) %>%
+    summarise(
+      classes = paste(medication_class, collapse = ", "),
+      n_classes = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(n_classes), PRODUCT_NAME)
+  
+  # Save detailed overlap information
+  write_csv(overlap_details, "../output/ndc_overlap_details.csv")
+  
+  summary_text <- c(
+    "=======================================================",
+    "NDC Overlap:",
+    "=======================================================",
+    paste("\nDate:", Sys.Date()),
+    paste("Total NDC codes that belong to multiple classes:", nrow(overlap_details))
+  )
+  
+  for (i in 1:nrow(overlap_details)) {
+    product_line <- paste0(
+      "- NDC: ", overlap_details$NDC11[i], " | ",
+      overlap_details$PRODUCT_NAME[i],
+      " (", overlap_details$classes[i], ")"
+    )
+    summary_text <- c(summary_text, product_line)
+  }
+  
+  # Write summary to text file
+  writeLines(summary_text, "../output/ndc_overlap_summary.txt")
+  
+  # Display summary in notebook
+  cat(paste(summary_text, collapse = "\n"))
+  
+} else {
+  message("No NDC codes overlap across medication classes")
+}
+
+```
