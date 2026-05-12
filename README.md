@@ -40,11 +40,11 @@ cd <repo-name>
 ### 2. Restore the R environment and configure data access
 
 Open 0-r-setup.R and follow the instructions. This installs all R packages at the versions used for the original analysis.
-Restart R after editing so the variables load. **Do not commit `.Renviron`** — it is listed in `.gitignore`.
+Restart R after editing the file.
 
 ### 3. Update folder paths
 
-Several scripts reference local folder paths that must be updated to match your environment before running.
+Several scripts reference local folder paths that must be updated to match your environment before running. You will see a placeholder path for these at the top of each code file.
 
 ## Running the Analysis
 
@@ -59,7 +59,7 @@ I also recommend clearing objects from the workspace in R before running the nex
 To change the study period and include more recent data, change the following:
 - 3-identify-new-users.qmd: change end in study_period_novel (line 32)
 - 5-continuous-coverage.do: change gen study_end (line 70)
-- 17-survival-analyses.qmd: change end_date (line 45))
+- 17-survival-analyses.qmd: change end_date (line 45)
 
 ### Sensitivity analyses
 
@@ -69,15 +69,15 @@ The table below summarizes each sensitivity analysis and the change required.
 
 | # | Sensitivity Analysis | File | Change |
 |---|---|---|---|
-| 1 | Entropy balancing weights instead of IPTW | `17-survival-analyses.qmd` | Lines 234 and 365: change `iptw` → `ebal` and `swfinal` → `ebalfinal` |
-| 2 | 2.5% asymmetric trimming of IPTW weights | `15-iptw.qmd` | Enable trimming at lines 66–85, 226–246, and 377–396 |
+| 1 | Entropy balancing weights instead of IPTW | `17-survival-analyses.qmd` | Lines 235 and 366: change `iptw` → `ebal` and `swfinal` → `ebalfinal` |
+| 2 | 2.5% asymmetric trimming of IPTW weights | `15-iptw.qmd` | Enable trimming at lines 66–85, 227–246, and 378–396 |
 | 3 | Per-protocol: censor at treatment switch/discontinuation (90-day grace period) | — | No change; runs automatically |
-| 4 | Per-protocol with IPCW in addition to IPTW | `17-survival-analyses.qmd` | Line 365: change `siptw` → `swfinal` |
-| 5 | Restrict to patients with prior metformin use at baseline | `13-data-prep.qmd` | Lines 188–189: exclude patients without metformin indicator |
+| 4 | Per-protocol with IPCW in addition to IPTW | `17-survival-analyses.qmd` | Line 366: change `siptw` → `swfinal` |
+| 5 | Restrict to patients with prior metformin use at baseline | `13-data-prep.qmd` | Lines 194-195: exclude patients without metformin indicator |
 | 6 | Require 6 months (instead of 12) of continuous insurance coverage | `5-continuous-coverage.do` | Line 26: change continuous-coverage requirement |
-| 7 | Start follow-up at index date (include early events) | `17-survival-analyses.qmd` | Line 146: change follow-up start to index date |
-| 8 | Require 6 months of follow-up after index, excluding early events | `17-survival-analyses.qmd` | Lines 169 and 302: require an additional 90 days of follow-up |
-| 9 | Exclude patients aged >85 at baseline | `13-data-prep.qmd` | Line 192: exclude patients with baseline age >85 |
+| 7 | Start follow-up at index date (include early events) | `17-survival-analyses.qmd` | Line 147: change follow-up start to index date |
+| 8 | Require 6 months of follow-up after index, excluding early events | `17-survival-analyses.qmd` | Lines 170 and 304: require an additional 90 days of follow-up |
+| 9 | Exclude patients aged >85 at baseline | `13-data-prep.qmd` | Line 198: exclude patients with baseline age >85 |
 
 ## Repository Structure
 
