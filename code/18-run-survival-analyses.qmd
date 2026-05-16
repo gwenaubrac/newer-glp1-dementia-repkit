@@ -31,7 +31,10 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 ```{r}
 #### LOAD DATA ####
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 library(dplyr)
 library(magrittr)
@@ -44,11 +47,11 @@ library(broom)
 
 end_date <- ymd(20260101)
 
-data <- readRDS("../output/data_novel.rds")
-data1 <- readRDS("../output/data1_novel.rds")
-data2 <- readRDS("../output/data2_novel.rds")
-data3 <- readRDS("../output/data3_novel.rds")
-cov_list <- readRDS("../output/cov_list_novel.rds")
+data <- readRDS(file.path(output_dir, "data_novel.rds"))
+data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
+data2 <- readRDS(file.path(output_dir, "data2_novel.rds"))
+data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
+cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 
 max_fu <- 730 # truncate follow-up up to 2 years after entry
 
@@ -405,7 +408,7 @@ rm(cohort, cohort_name, outcome)
 
 write.csv(
   followup_times,
-  paste0("../novel_res/followup_times_", Sys.Date(), ".csv"),
+  paste0(results_dir, "/followup_times_", Sys.Date(), ".csv"),
   row.names = FALSE
 )
 
@@ -416,7 +419,7 @@ cox_ph %<>%
 
 write.csv(
   cox_ph,
-  paste0("../novel_res/cox_ph_", Sys.Date(), ".csv"),
+  paste0(results_dir, "/cox_ph_", Sys.Date(), ".csv"),
   row.names = FALSE
 )
 
@@ -428,13 +431,13 @@ summary_table <- summary_table %>%
 
 write.csv(
   summary_table,
-  paste0("../novel_res/all_cox_results_", Sys.Date(), ".csv"),
+  paste0(results_dir, "/all_cox_results_", Sys.Date(), ".csv"),
   row.names = FALSE
 )
 
 saveRDS(
   summary_table,
-  paste0("../novel_res/all_cox_results_novel_", Sys.Date(), ".rds")
+  paste0(results_dir, "/all_cox_results_novel_", Sys.Date(), ".rds")
 )
 
 ```
@@ -475,7 +478,7 @@ row.names(final_tab2) <- c("ITT", "PP")
 
 write.csv(
   final_tab2,
-  paste0("../novel_res/final_tab2_", Sys.Date(), ".csv"),
+  paste0(results_dir, "/final_tab2_", Sys.Date(), ".csv"),
   row.names = FALSE
 )
 ```

@@ -1,4 +1,17 @@
-cd "C:\Path\To\Your\Folder"
+* ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
+cd "$OUTPUT_DIR"
 
 * getting ZIP of provider for patient where date of service and index date match
 *(provider that saw that patient on day they initiated GLP1)
@@ -10,7 +23,7 @@ cd "C:\Path\To\Your\Folder"
 
 clear
 
-import delimited "I:\acs_zip_edu_inc.csv"
+import delimited "$PROJECT_ROOT/code/acs_zip3_edu_inc.csv"
 drop v1
 
 destring prop_hs, replace force

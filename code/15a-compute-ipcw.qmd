@@ -26,21 +26,24 @@ library(broom)
 
 end_date <- ymd(20260101)
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 # create directory to save results in 
-dir.create("../novel_res", recursive = TRUE)
+dir.create(results_dir, recursive = TRUE)
 
-disc_date <- read_dta("../output/disc_date_novel.dta")
-switch_date <- read_dta("../output/switch_date_novel.dta")
+disc_date <- read_dta(file.path(output_dir, "disc_date_novel.dta"))
+switch_date <- read_dta(file.path(output_dir, "switch_date_novel.dta"))
 
-data <- readRDS("../output/clean_novel.rds")
+data <- readRDS(file.path(output_dir, "clean_novel.rds"))
 
 data <- data %>%
   left_join(disc_date, by = "PATIENT_ID") %>%
   left_join(switch_date, by = "PATIENT_ID")
 
-cov_list <- readRDS("../output/cov_list_novel.rds")
+cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 cov_list
 
 # define discontinuation flag

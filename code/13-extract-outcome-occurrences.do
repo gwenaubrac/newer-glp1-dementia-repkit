@@ -1,4 +1,17 @@
 * ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
+* ============================================================================
 * Identify dementia outcome in follow-up
 * ============================================================================
 
@@ -6,7 +19,7 @@
 
 * Define study end date
 local end_date = mdy(1,1,2026)
-cd "C:\Path\To\Your\Folder"
+cd "$OUTPUT_DIR"
 
 ***all-cause dementia
 clear

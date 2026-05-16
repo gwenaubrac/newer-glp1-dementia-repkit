@@ -11,18 +11,21 @@ Create a table of baseline characteristics before weighting. Check the standardi
 ```{r}
 #### DESCRIBE SAMPLE ####
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 library(dplyr)
 library(magrittr)
 library(table1)
 library(smd)
 
-data <- readRDS("../output/data_novel.rds")
-data1 <- readRDS("../output/data1_novel.rds")
-data2 <- readRDS("../output/data2_novel.rds")
-data3 <- readRDS("../output/data3_novel.rds")
-cov_list <- readRDS("../output/cov_list_novel.rds")
+data <- readRDS(file.path(output_dir, "data_novel.rds"))
+data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
+data2 <- readRDS(file.path(output_dir, "data2_novel.rds"))
+data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
+cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 
 data1$trt <- factor(data1$trt, levels = c(0, 1), labels = c("SGLT2 Inhibitors", "Novel GLP1 Agonists"))
 data2$trt <- factor(data2$trt, levels = c(0, 1), labels = c("DPP4 Inhibitors", "Novel GLP1 Agonists"))
@@ -158,7 +161,7 @@ tab1_data <- table1(
 )
 
 tab1_data
-write.table(tab1_data, "../novel_res/tab1.csv", col.names = T, row.names = F, append = F, sep = ",")
+write.table(tab1_data, file.path(results_dir, "tab1.csv"), col.names = T, row.names = F, append = F, sep = ",")
 
 # table 1 for specific comparisons:
 tab1_formula_new <- (tab1_formula <- as.formula(paste("~", paste(cov_list, collapse = " + "), " | trt")))
@@ -189,12 +192,12 @@ tab1_data1 <- table1(
 )
 
 tab1_data1
-write.table(tab1_data1, "../novel_res/tab1_data1.csv", col.names = T, row.names = F, append = F, sep = ",")
+write.table(tab1_data1, file.path(results_dir, "tab1_data1.csv"), col.names = T, row.names = F, append = F, sep = ",")
 
 
 library(tidysmd)
 
-sink("../novel_res/smd_d1.txt")
+sink(file.path(results_dir, "smd_d1.txt"))
 
 cat("=", rep("=", 70), "\n", sep = "")
 cat("STANDARDIZED MEAN DIFFERENCES\n")
@@ -239,10 +242,10 @@ tab1_data2 <- table1(
 )
 
 tab1_data2
-write.table(tab1_data2, "../novel_res/tab1_data2.csv", col.names = T, row.names = F, append = F, sep = ",")
+write.table(tab1_data2, file.path(results_dir, "tab1_data2.csv"), col.names = T, row.names = F, append = F, sep = ",")
 
 
-sink("../novel_res/smd_d2.txt")
+sink(file.path(results_dir, "smd_d2.txt"))
 
 cat("=", rep("=", 70), "\n", sep = "")
 cat("STANDARDIZED MEAN DIFFERENCES\n")
@@ -288,9 +291,9 @@ tab1_data3 <- table1(
 )
 
 tab1_data3
-write.table(tab1_data3, "../novel_res/tab1_data3.csv", col.names = T, row.names = F, append = F, sep = ",")
+write.table(tab1_data3, file.path(results_dir, "tab1_data3.csv"), col.names = T, row.names = F, append = F, sep = ",")
 
-sink("../novel_res/smd_d3.txt")
+sink(file.path(results_dir, "smd_d3.txt"))
 
 cat("=", rep("=", 70), "\n", sep = "")
 cat("STANDARDIZED MEAN DIFFERENCES\n")
@@ -343,7 +346,7 @@ final_tab1 <- data.frame(
 
 write.csv(
   final_tab1,
-  paste0("../novel_res/final_tab1_", Sys.Date(), ".csv"),
+  paste0(results_dir, "/final_tab1_", Sys.Date(), ".csv"),
   row.names = FALSE
 )
 ```

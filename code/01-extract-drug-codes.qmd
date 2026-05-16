@@ -31,7 +31,10 @@ library(dbplyr)
 library(stringr)
 
 # Set working directory to wherever this file is for you
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 # Set up connection to Snowflake
 con <- dbConnect(
@@ -40,8 +43,8 @@ con <- dbConnect(
 )
 
 # create output directory
-if (!dir.exists("../output")) {
-  dir.create("../output")
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir)
 }
 
 ```
@@ -186,7 +189,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/semaglutide_ndcs.csv")
+  write_csv(file.path(output_dir, "semaglutide_ndcs.csv"))
 
 drug_reference %>%
   filter(tirzepatide == 1) %>%
@@ -197,7 +200,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/tirzepatide_ndcs.csv")
+  write_csv(file.path(output_dir, "tirzepatide_ndcs.csv"))
 
 drug_reference %>%
   filter(liraglutide == 1) %>%
@@ -208,7 +211,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/liraglutide_ndcs.csv")
+  write_csv(file.path(output_dir, "liraglutide_ndcs.csv"))
 
 drug_reference %>%
   filter(dulaglutide == 1) %>%
@@ -219,7 +222,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/dulaglutide_ndcs.csv")
+  write_csv(file.path(output_dir, "dulaglutide_ndcs.csv"))
 
 # All GLP-1 medications combined
 drug_reference %>%
@@ -231,7 +234,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/glp1_ndcs.csv")
+  write_csv(file.path(output_dir, "glp1_ndcs.csv"))
 
 # Comparator classes
 drug_reference %>%
@@ -243,7 +246,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/sglt2_ndcs.csv")
+  write_csv(file.path(output_dir, "sglt2_ndcs.csv"))
 
 drug_reference %>%
   filter(dpp4 == 1) %>%
@@ -254,7 +257,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/dpp4_ndcs.csv")
+  write_csv(file.path(output_dir, "dpp4_ndcs.csv"))
 
 drug_reference %>%
   filter(sulfonylurea == 1) %>%
@@ -265,7 +268,7 @@ drug_reference %>%
     PRODUCT_NAME,
     THERAPEUTIC_CLASS = KH_THERAPEUTIC_CLASS_ARRAY
   ) %>%
-  write_csv("../output/sulfonylurea_ndcs.csv")
+  write_csv(file.path(output_dir, "sulfonylurea_ndcs.csv"))
 ```
 
 Here we check whether there are NDC codes that correspond to multiple drug classes. If any are found, there will be a warning and you can check which NDC codes, and product names were flagged in the "ndc_overlap_summary.txt". Please check the log to see if there are any NDCs that correspond to multiple medications. If so, please exclude them from the NDC lists, which will later be used to identify patients for inclusion in the cohort. 
@@ -310,7 +313,7 @@ if (nrow(ndc_overlap) > 0) {
     arrange(desc(n_classes), PRODUCT_NAME)
   
   # Save detailed overlap information
-  write_csv(overlap_details, "../output/ndc_overlap_details.csv")
+  write_csv(overlap_details, file.path(output_dir, "ndc_overlap_details.csv"))
   
   summary_text <- c(
     "=======================================================",
@@ -330,7 +333,7 @@ if (nrow(ndc_overlap) > 0) {
   }
   
   # Write summary to text file
-  writeLines(summary_text, "../output/ndc_overlap_summary.txt")
+  writeLines(summary_text, file.path(output_dir, "ndc_overlap_summary.txt"))
   
   # Display summary in notebook
   cat(paste(summary_text, collapse = "\n"))

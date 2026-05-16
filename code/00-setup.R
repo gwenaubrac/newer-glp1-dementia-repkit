@@ -13,11 +13,16 @@ install.packages("yaml")
 # then it might take a few minutes to finish installing all packages
 renv::restore()
 
-# you will also need to create a .Renvr file with the DSN and UID needed to load the data:
+# create a .Renviron file with the DSN needed to load the data and the project paths.
+# update the values below, then run this block.
 lines <- c(
-  "DSN=your_DSN"
+  "DSN=your_DSN",
   #"UID=your_username",
-  # PWD=your_password
+  # "PWD=your_password",
+  "",
+  "PROJECT_ROOT=/path/to/your/repo",
+  "OUTPUT_DIR=/path/to/your/repo/output",
+  "RESULTS_DIR=/path/to/your/repo/novel_res"
 )
 writeLines(lines, ".Renviron")
 

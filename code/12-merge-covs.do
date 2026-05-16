@@ -1,11 +1,24 @@
 * ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
+* ============================================================================
 * Merge covariate into
 * ============================================================================
 
 * We are now combining all of the covariate data from previous steps to add it to the final cohort dataframe. 
 
 clear
-cd "C:\Path\To\Your\Folder"
+cd "$OUTPUT_DIR"
 use final_novel, clear
 
 count

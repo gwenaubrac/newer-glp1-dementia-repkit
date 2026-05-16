@@ -1,3 +1,16 @@
+* ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
 
 * Identify whether patients had continuous coverage in 1-year lookback from index date
 * And when their continous coverage ended after index date
@@ -13,7 +26,7 @@
 
 clear
 * make sure to update the path and specify dsn/password as needed with odbc load
-cd "C:\Path\To\Your\Folder"
+cd "$OUTPUT_DIR"
 
 odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") 
 

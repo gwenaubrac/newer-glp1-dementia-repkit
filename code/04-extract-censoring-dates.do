@@ -1,3 +1,16 @@
+* ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
 * note: you have to run the entire script at once
 * since using temporary files
 
@@ -8,7 +21,7 @@
 * to change length of the grace period, change from '90' to whatever grace period you want
 
 * please update the cd to your folder:
-cd "C:\Path\To\Your\Folder"
+cd "$PROJECT_ROOT"
 clear all
 set more off
 

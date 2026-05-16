@@ -21,7 +21,10 @@ library(tidyverse)
 library(gt)
 library(patchwork)
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 outcome <- "dementia_allcause"
 
@@ -30,11 +33,11 @@ cohort_name <- "data1"
 
 end_date <- ymd(20260101)
 
-data <- readRDS("../output/data_novel.rds")
-data1 <- readRDS("../output/data1_novel.rds")
-data2 <- readRDS("../output/data2_novel.rds")
-data3 <- readRDS("../output/data3_novel.rds")
-cov_list <- readRDS("../output/cov_list_novel.rds")
+data <- readRDS(file.path(output_dir, "data_novel.rds"))
+data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
+data2 <- readRDS(file.path(output_dir, "data2_novel.rds"))
+data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
+cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 
 max_fu <- 730
 
@@ -137,7 +140,7 @@ p <- ggsurvplot(km_fit,
 
 p
 
-pdf(paste0("../novel_res/km_itt_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+pdf(paste0(results_dir, "/km_itt_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
 print(p)
 dev.off()
 dev.off()
@@ -163,7 +166,7 @@ p <- ggsurvplot(km_fit,
                 ylim = c(0, 0.03)) # adjust scale as needed
 
 p
-pdf(paste0("../novel_res/km_pp_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+pdf(paste0(results_dir, "/km_pp_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
 print(p)
 dev.off()
 dev.off()
@@ -178,8 +181,8 @@ rm(km_fit, p)
 date <- "2026-05-07"
 
 ## load results
-summary_table <- readRDS(paste0("../novel_res/all_cox_results_novel_", date, ".rds"))
-followup_times <- read.csv(paste0("../novel_res/followup_times_", date, ".csv"))
+summary_table <- readRDS(paste0(results_dir, "/all_cox_results_novel_", date, ".rds"))
+followup_times <- read.csv(paste0(results_dir, "/followup_times_", date, ".csv"))
 
 followup_times %<>%
   mutate(

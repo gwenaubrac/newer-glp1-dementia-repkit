@@ -24,7 +24,10 @@ library(arrow)
 library(lubridate)
 library(magrittr)
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 # Define study period
 study_period_novel <- list(
@@ -53,19 +56,19 @@ First we will load all fills for the index medications in one same file.
 #| message: false
 
 # Load all dispensing datasets
-dispensings_semaglutide <- read_parquet("../output/dispensings_semaglutide.parquet") %>%
+dispensings_semaglutide <- read_parquet(file.path(output_dir, "dispensings_semaglutide.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
-dispensings_tirzepatide <- read_parquet("../output/dispensings_tirzepatide.parquet") %>%
+dispensings_tirzepatide <- read_parquet(file.path(output_dir, "dispensings_tirzepatide.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
-dispensings_liraglutide <- read_parquet("../output/dispensings_liraglutide.parquet") %>%
+dispensings_liraglutide <- read_parquet(file.path(output_dir, "dispensings_liraglutide.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
-dispensings_dulaglutide <- read_parquet("../output/dispensings_dulaglutide.parquet") %>%
+dispensings_dulaglutide <- read_parquet(file.path(output_dir, "dispensings_dulaglutide.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
-dispensings_sglt2 <- read_parquet("../output/dispensings_sglt2.parquet") %>%
+dispensings_sglt2 <- read_parquet(file.path(output_dir, "dispensings_sglt2.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
-dispensings_dpp4 <- read_parquet("../output/dispensings_dpp4.parquet") %>%
+dispensings_dpp4 <- read_parquet(file.path(output_dir, "dispensings_dpp4.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
-dispensings_sulfo <- read_parquet("../output/dispensings_sulfo.parquet") %>%
+dispensings_sulfo <- read_parquet(file.path(output_dir, "dispensings_sulfo.parquet")) %>%
   select(-TRANSACTION_TYPE, -DAYS_SUPPLY)
 
 # Create combined dataset for all study medications
@@ -372,7 +375,7 @@ log_lines <- c(
 rm(same_day_multiple_class, same_day_multiple_glp1, prior_use, glp1_breakdown)
 
 # Save cohort
-write_parquet(index_fill_novel, "../output/index_novel_comparisons.parquet")
+write_parquet(index_fill_novel, file.path(output_dir, "index_novel_comparisons.parquet"))
 rm(index_fill_novel)
 ```
 
@@ -383,7 +386,7 @@ We can describe the number of patients and study periods for each cohort in our 
 ```{r}
 #| label: summary
 
-index_fill_novel <- read_parquet("../output/index_novel_comparisons.parquet")
+index_fill_novel <- read_parquet(file.path(output_dir, "index_novel_comparisons.parquet"))
 
 # Create summary table
 cohort_summary <- tibble(
@@ -397,7 +400,7 @@ print(cohort_summary)
 
 # Write log file
 
-writeLines(log_lines, "../output/new_user_identification_log.txt")
+writeLines(log_lines, file.path(output_dir, "new_user_identification_log.txt"))
 ```
 
 Finally we can also save the cohort for later use in STATA. 
@@ -408,7 +411,7 @@ Finally we can also save the cohort for later use in STATA.
 # Convert to stata for next step where determine continuous coverage
 # because this step is too inefficient in R
 library(haven)
-write_dta(index_fill_novel, "../output/index_novel_comparisons.dta")
+write_dta(index_fill_novel, file.path(output_dir, "index_novel_comparisons.dta"))
 ```
 
 We can also delete the dispensings files saved in parquet format as we only need the .dta ones for the next steps (and these files are very bulky). We also won't need the parquet format of the index cohorts. 
@@ -417,15 +420,15 @@ We can also delete the dispensings files saved in parquet format as we only need
 #|label: delete-files
 
 # delete dispensings parquet files
-file.remove("../output/dispensings_glp1.parquet")
-file.remove("../output/dispensings_sglt2.parquet")
-file.remove("../output/dispensings_dpp4.parquet")
-file.remove("../output/dispensings_sulfo.parquet")
-file.remove("../output/dispensings_semaglutide.parquet")
-file.remove("../output/dispensings_tirzepatide.parquet")
-file.remove("../output/dispensings_liraglutide.parquet")
-file.remove("../output/dispensings_dulaglutide.parquet")
+file.remove(file.path(output_dir, "dispensings_glp1.parquet"))
+file.remove(file.path(output_dir, "dispensings_sglt2.parquet"))
+file.remove(file.path(output_dir, "dispensings_dpp4.parquet"))
+file.remove(file.path(output_dir, "dispensings_sulfo.parquet"))
+file.remove(file.path(output_dir, "dispensings_semaglutide.parquet"))
+file.remove(file.path(output_dir, "dispensings_tirzepatide.parquet"))
+file.remove(file.path(output_dir, "dispensings_liraglutide.parquet"))
+file.remove(file.path(output_dir, "dispensings_dulaglutide.parquet"))
 
 # delete index parquet files
-file.remove("../output/index_novel_comparisons.parquet")
+file.remove(file.path(output_dir, "index_novel_comparisons.parquet"))
 ```

@@ -22,7 +22,10 @@ library(dplyr)
 library(dbplyr)
 library(arrow)
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
 # Set up connection to Snowflake
 con <- dbConnect(
@@ -65,7 +68,7 @@ pharmacy_sample <- pharmacy_tbl %>%
 pharmacy_sample
 
 # Check NDC11 format in  exported files
-ndc_sample <- read_csv("../output/semaglutide_ndcs.csv", show_col_types = FALSE) %>%
+ndc_sample <- read_csv(file.path(output_dir, "semaglutide_ndcs.csv"), show_col_types = FALSE) %>%
   head(5) %>%
   pull(NDC11)
 
@@ -172,56 +175,56 @@ extract_and_save_dispensings <- function(ndc_file, medication_name, med_class,
 
 # Process each medication one at a time to minimize memory usage
 stats_semaglutide <- extract_and_save_dispensings(
-  "../output/semaglutide_ndcs.csv", # NDC code file
+  file.path(output_dir, "semaglutide_ndcs.csv"), # NDC code file
   "Semaglutide", # medication name (medication_name)
   "GLP1", # medication group name (med_class)
-  "../output/dispensings_semaglutide.parquet", # where to save the file
+  file.path(output_dir, "dispensings_semaglutide.parquet"), # where to save the file
   "semaglutide" # GLP1 medication name if applicable (glp1_med)
 )
 
 stats_tirzepatide <- extract_and_save_dispensings(
-  "../output/tirzepatide_ndcs.csv",
+  file.path(output_dir, "tirzepatide_ndcs.csv"),
   "Tirzepatide",
   "GLP1",
-  "../output/dispensings_tirzepatide.parquet",
+  file.path(output_dir, "dispensings_tirzepatide.parquet"),
   "tirzepatide"
 )
 
 stats_liraglutide <- extract_and_save_dispensings(
-  "../output/liraglutide_ndcs.csv",
+  file.path(output_dir, "liraglutide_ndcs.csv"),
   "Liraglutide",
   "GLP1",
-  "../output/dispensings_liraglutide.parquet",
+  file.path(output_dir, "dispensings_liraglutide.parquet"),
   "liraglutide"
 )
 
 stats_dulaglutide <- extract_and_save_dispensings(
-  "../output/dulaglutide_ndcs.csv",
+  file.path(output_dir, "dulaglutide_ndcs.csv"),
   "Dulaglutide",
   "GLP1",
-  "../output/dispensings_dulaglutide.parquet",
+  file.path(output_dir, "dispensings_dulaglutide.parquet"),
   "dulaglutide"
 )
 
 stats_sglt2 <- extract_and_save_dispensings(
-  "../output/sglt2_ndcs.csv",
+  file.path(output_dir, "sglt2_ndcs.csv"),
   "SGLT2i",
   "SGLT2",
-  "../output/dispensings_sglt2.parquet"
+  file.path(output_dir, "dispensings_sglt2.parquet")
 )
 
 stats_dpp4 <- extract_and_save_dispensings(
-  "../output/dpp4_ndcs.csv",
+  file.path(output_dir, "dpp4_ndcs.csv"),
   "DPP-4i",
   "DPP4",
-  "../output/dispensings_dpp4.parquet"
+  file.path(output_dir, "dispensings_dpp4.parquet")
 )
 
 stats_sulfo <- extract_and_save_dispensings(
-  "../output/sulfonylurea_ndcs.csv",
+  file.path(output_dir, "sulfonylurea_ndcs.csv"),
   "Sulfonylureas",
   "SULFO",
-  "../output/dispensings_sulfo.parquet"
+  file.path(output_dir, "dispensings_sulfo.parquet")
 )
 
 ```
@@ -235,10 +238,10 @@ Combine all the fills for the GLP1 medications (arranged by ID and date of servi
 
 # Load individual GLP-1 files and combine (more memory efficient than keeping in memory)
 dispensings_glp1 <- bind_rows(
-  read_parquet("../output/dispensings_semaglutide.parquet"),
-  read_parquet("../output/dispensings_tirzepatide.parquet"),
-  read_parquet("../output/dispensings_liraglutide.parquet"),
-  read_parquet("../output/dispensings_dulaglutide.parquet")
+  read_parquet(file.path(output_dir, "dispensings_semaglutide.parquet")),
+  read_parquet(file.path(output_dir, "dispensings_tirzepatide.parquet")),
+  read_parquet(file.path(output_dir, "dispensings_liraglutide.parquet")),
+  read_parquet(file.path(output_dir, "dispensings_dulaglutide.parquet"))
 ) %>%
   arrange(PATIENT_ID, DATE_OF_SERVICE)
 
@@ -246,7 +249,7 @@ message("  Combined GLP-1 dispensings: ", format(nrow(dispensings_glp1), big.mar
 message("  Unique GLP-1 patients: ", format(n_distinct(dispensings_glp1$PATIENT_ID), big.mark = ","))
 
 # Save combined dataset
-write_parquet(dispensings_glp1, "../output/dispensings_glp1.parquet")
+write_parquet(dispensings_glp1, file.path(output_dir, "dispensings_glp1.parquet"))
 message("  Saved to: ../output/dispensings_glp1.parquet")
 
 # Calculate stats for log
@@ -311,7 +314,7 @@ for (i in 1:nrow(dispensing_summary)) {
 
 # Write log file
 
-writeLines(log_lines, "../output/dispensing_extraction_log.txt")
+writeLines(log_lines, file.path(output_dir, "dispensing_extraction_log.txt"))
 
 # Disconnect from Snowflake
 dbDisconnect(con)
@@ -327,35 +330,35 @@ I originally tried to get the discontinuation dates using R, but it was just not
 #|label: convert-stata
 library(haven)
 
-dispensings_glp1 <- read_parquet("../output/dispensings_glp1.parquet")
-write_dta(dispensings_glp1, "../output/dispensings_glp1.dta")
+dispensings_glp1 <- read_parquet(file.path(output_dir, "dispensings_glp1.parquet"))
+write_dta(dispensings_glp1, file.path(output_dir, "dispensings_glp1.dta"))
 rm(dispensings_glp1)
 
-dispensings_sglt2 <- read_parquet("../output/dispensings_sglt2.parquet")
-write_dta(dispensings_sglt2, "../output/dispensings_sglt2.dta")
+dispensings_sglt2 <- read_parquet(file.path(output_dir, "dispensings_sglt2.parquet"))
+write_dta(dispensings_sglt2, file.path(output_dir, "dispensings_sglt2.dta"))
 rm(dispensings_sglt2)
 
-dispensings_dpp4 <- read_parquet("../output/dispensings_dpp4.parquet")
-write_dta(dispensings_dpp4, "../output/dispensings_dpp4.dta")
+dispensings_dpp4 <- read_parquet(file.path(output_dir, "dispensings_dpp4.parquet"))
+write_dta(dispensings_dpp4, file.path(output_dir, "dispensings_dpp4.dta"))
 rm(dispensings_dpp4)
 
-dispensings_sulfo <- read_parquet("../output/dispensings_sulfo.parquet")
-write_dta(dispensings_sulfo, "../output/dispensings_sulfo.dta")
+dispensings_sulfo <- read_parquet(file.path(output_dir, "dispensings_sulfo.parquet"))
+write_dta(dispensings_sulfo, file.path(output_dir, "dispensings_sulfo.dta"))
 rm(dispensings_sulfo)
 
-dispensings_semaglutide <- read_parquet("../output/dispensings_semaglutide.parquet")
-write_dta(dispensings_semaglutide, "../output/dispensings_semaglutide.dta")
+dispensings_semaglutide <- read_parquet(file.path(output_dir, "dispensings_semaglutide.parquet"))
+write_dta(dispensings_semaglutide, file.path(output_dir, "dispensings_semaglutide.dta"))
 rm(dispensings_semaglutide)
 
-dispensings_tirzepatide <- read_parquet("../output/dispensings_tirzepatide.parquet")
-write_dta(dispensings_tirzepatide, "../output/dispensings_tirzepatide.dta")
+dispensings_tirzepatide <- read_parquet(file.path(output_dir, "dispensings_tirzepatide.parquet"))
+write_dta(dispensings_tirzepatide, file.path(output_dir, "dispensings_tirzepatide.dta"))
 rm(dispensings_tirzepatide)
 
-dispensings_liraglutide <- read_parquet("../output/dispensings_liraglutide.parquet")
-write_dta(dispensings_liraglutide, "../output/dispensings_liraglutide.dta")
+dispensings_liraglutide <- read_parquet(file.path(output_dir, "dispensings_liraglutide.parquet"))
+write_dta(dispensings_liraglutide, file.path(output_dir, "dispensings_liraglutide.dta"))
 rm(dispensings_liraglutide)
 
-dispensings_dulaglutide <- read_parquet("../output/dispensings_dulaglutide.parquet")
-write_dta(dispensings_dulaglutide, "../output/dispensings_dulaglutide.dta")
+dispensings_dulaglutide <- read_parquet(file.path(output_dir, "dispensings_dulaglutide.parquet"))
+write_dta(dispensings_dulaglutide, file.path(output_dir, "dispensings_dulaglutide.dta"))
 rm(dispensings_dulaglutide)
 ```

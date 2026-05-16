@@ -29,9 +29,12 @@ library(magrittr)
 library(haven)
 library(tidyr)
 
-here::here()
-data <- readRDS("../output/ipcw_novel.rds")
-cov_list <- readRDS("../output/cov_list_novel.rds")
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
+data <- readRDS(file.path(output_dir, "ipcw_novel.rds"))
+cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 
 data %<>%
     mutate(
@@ -148,7 +151,7 @@ p <- p +
 
 p
 
-ggsave("../novel_res/ps_bal1.png", plot = p, width = 6, height = 4, units = "in", bg = "white")
+ggsave(file.path(results_dir, "ps_bal1.png"), plot = p, width = 6, height = 4, units = "in", bg = "white")
 dev.off()
 rm(p)
 
@@ -169,7 +172,7 @@ bal1 <- bal_tab1$Balance %>%
                 'Balance' = M.Threshold)
 
 bal1$Variable <- row.names(bal1)
-write.table(bal1, "../novel_res/bal1.csv", col.names = T, row.names = T, append = F, sep = ',')
+write.table(bal1, file.path(results_dir, "bal1.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
 p <- love.plot(
   bal_tab1, 
@@ -202,7 +205,7 @@ p <- p + theme(
 
 p
 
-ggsave("../novel_res/loveplot1.png", plot = p, width = 6, height = 12, units = "in", bg = 'white')
+ggsave(file.path(results_dir, "loveplot1.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
 dev.off()
 rm(p)
 
@@ -301,7 +304,7 @@ p <- p +
 
 p
 
-ggsave("../novel_res/ps_bal2.png", plot = p, width = 6, height = 4, units = "in", bg = "white")
+ggsave(file.path(results_dir, "ps_bal2.png"), plot = p, width = 6, height = 4, units = "in", bg = "white")
 dev.off()
 rm(p)
 
@@ -322,7 +325,7 @@ bal2 <- bal_tab2$Balance %>%
                 'Balance' = M.Threshold)
 
 bal2$Variable <- row.names(bal2)
-write.table(bal2, "../novel_res/bal2.csv", col.names = T, row.names = T, append = F, sep = ',')
+write.table(bal2, file.path(results_dir, "bal2.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
 p <- love.plot(
   bal_tab2, 
@@ -355,7 +358,7 @@ p <- p + theme(
 
 p
 
-ggsave("../novel_res/loveplot2.png", plot = p, width = 6, height = 12, units = "in", bg = 'white')
+ggsave(file.path(results_dir, "loveplot2.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
 dev.off()
 rm(p)
 
@@ -457,7 +460,7 @@ p <- p +
 
 p
 
-ggsave("../novel_res/ps_bal3.png", plot = p, width = 6, height = 4, units = "in", bg = "white")
+ggsave(file.path(results_dir, "ps_bal3.png"), plot = p, width = 6, height = 4, units = "in", bg = "white")
 dev.off()
 
 bal_tab3 <- bal.tab(ps_formula,
@@ -477,7 +480,7 @@ bal3 <- bal_tab3$Balance %>%
                 'Balance' = M.Threshold)
 
 bal3$Variable <- row.names(bal3)
-write.table(bal3, "../novel_res/bal3.csv", col.names = T, row.names = T, append = F, sep = ',')
+write.table(bal3, file.path(results_dir, "bal3.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
 p <- love.plot(
   bal_tab3, 
@@ -510,7 +513,7 @@ p <- p + theme(
 
 p
 
-ggsave("../novel_res/loveplot3.png", plot = p, width = 6, height = 12, units = "in", bg = 'white')
+ggsave(file.path(results_dir, "loveplot3.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
 dev.off()
 rm(p)
 
@@ -549,7 +552,7 @@ bal1 <- bal_tab1$Balance %>%
                 'Balance' = M.Threshold)
 
 bal1$Variable <- row.names(bal1)
-write.table(bal1, "../novel_res/ebal1.csv", col.names = T, row.names = T, append = F, sep = ',')
+write.table(bal1, file.path(results_dir, "ebal1.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
 # data 2: 
 ebal_weights_out2 <- WeightIt::weightit(
@@ -579,7 +582,7 @@ bal2 <- bal_tab2$Balance %>%
                 'Balance' = M.Threshold)
 
 bal2$Variable <- row.names(bal1)
-write.table(bal2, "../novel_res/ebal2.csv", col.names = T, row.names = T, append = F, sep = ',')
+write.table(bal2, file.path(results_dir, "ebal2.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
 # data 3: 
 ebal_weights_out3 <- WeightIt::weightit(
@@ -609,7 +612,7 @@ bal3 <- bal_tab3$Balance %>%
                 'Balance' = M.Threshold)
 
 bal3$Variable <- row.names(bal3)
-write.table(bal3, "../novel_res/ebal3.csv", col.names = T, row.names = T, append = F, sep = ',')
+write.table(bal3, file.path(results_dir, "ebal3.csv"), col.names = T, row.names = T, append = F, sep = ',')
 ```
 
 ## SAVE COHORT DATA WITH WEIGHTS
@@ -640,10 +643,10 @@ data3 %<>%
 
 # save all cohort dataframes
 # ready for description + analysis
-saveRDS(data, "../output/data_novel.rds") # all patients
-saveRDS(data1, "../output/data1_novel.rds") # novel GLP1s vs sglt2
-saveRDS(data2, "../output/data2_novel.rds") # novel GLP1s vs dpp4
-saveRDS(data3, "../output/data3_novel.rds") # novel GLP1s vs sulfo
+saveRDS(data, file.path(output_dir, "data_novel.rds")) # all patients
+saveRDS(data1, file.path(output_dir, "data1_novel.rds")) # novel GLP1s vs sglt2
+saveRDS(data2, file.path(output_dir, "data2_novel.rds")) # novel GLP1s vs dpp4
+saveRDS(data3, file.path(output_dir, "data3_novel.rds")) # novel GLP1s vs sulfo
 ```
 
 
@@ -653,7 +656,7 @@ saveRDS(data3, "../output/data3_novel.rds") # novel GLP1s vs sulfo
 ```{r}
 # save models
 
-sink("../novel_res/iptw_models_novel.txt")
+sink(file.path(results_dir, "iptw_models_novel.txt"))
 
 print(ps_formula)
 
@@ -738,7 +741,7 @@ weights_summary_d3 <- data3 %>%
   mutate(Group = "Semaglutide vs Sulfos")
 
 
-write.csv(weights_summary_d1, "../novel_res/iptw_and_final_weights_d1.csv", row.names = FALSE)
-write.csv(weights_summary_d2, "../novel_res/iptw_and_final_weights_d2.csv", row.names = FALSE)
-write.csv(weights_summary_d3, "../novel_res/iptw_and_final_weights_d3.csv", row.names = FALSE)
+write.csv(weights_summary_d1, file.path(results_dir, "iptw_and_final_weights_d1.csv"), row.names = FALSE)
+write.csv(weights_summary_d2, file.path(results_dir, "iptw_and_final_weights_d2.csv"), row.names = FALSE)
+write.csv(weights_summary_d3, file.path(results_dir, "iptw_and_final_weights_d3.csv"), row.names = FALSE)
 ```

@@ -1,9 +1,22 @@
 * ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
+* ============================================================================
 * Race and Ethnicity
 * ============================================================================
 
 * make sure to update the path and go to \output folder
-cd "C:\Path\To\Your\Folder"
+cd "$OUTPUT_DIR"
 clear 
 
 odbc load, exec("SELECT PATIENT_ID, PATIENT_RACE_ETHNICITY FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_RACE_ETHNICITY_LATEST")

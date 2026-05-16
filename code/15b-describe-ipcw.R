@@ -1,7 +1,12 @@
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
+
 #### SWITCH MODEL SEPARATELY BY TREATMENT ####
 
 # Open a text file to save ../outputs
-sink("../novel_res/switching_analysis_results_novel.txt")
+sink(file.path(results_dir, "switching_analysis_results_novel.txt"))
 
 cat("=" , rep("=", 70), "\n", sep = "")
 cat("MEDICATION SWITCHING ANALYSIS RESULTS\n")
@@ -72,7 +77,7 @@ cat("=" , rep("=", 70), "\n", sep = "")
 sink()
 
 
-sink("../novel_res/ipcw_models_switch_novel.txt")
+sink(file.path(results_dir, "ipcw_models_switch_novel.txt"))
 
 cat("=" , rep("=", 70), "\n", sep = "")
 cat("IPCW SWITCH MODELS\n")
@@ -183,7 +188,7 @@ data %<>%
 ipcw_disc_formula <- as.formula(paste("nodisc ~", paste(cov_list, collapse = " + ")))
 
 
-sink("../novel_res/ipcw_models_disc_novel.txt")
+sink(file.path(results_dir, "ipcw_models_disc_novel.txt"))
 
 cat("=" , rep("=", 70), "\n", sep = "")
 cat("IPCW DISCONTINUATION MODELS\n")
@@ -279,7 +284,7 @@ sink()
 summary(data$ipcw_disc)
 
 
-saveRDS(data, "../output/ipcw_novel.rds")
+saveRDS(data, file.path(output_dir, "ipcw_novel.rds"))
 
 
 #### DESCRIBE CENSORING AND WEIGHTS ####
@@ -374,9 +379,9 @@ weights_summary_by_group <- data %>%
 
 
 # Save tables
-write.csv(time_summary_by_group, "../novel_res/time_to_censoring_group_novel.csv", row.names = FALSE)
-write.csv(time_summary_overall, "../novel_res/time_to_censoring_overall_novel.csv", row.names = FALSE)
-write.csv(weights_summary_by_group, "../novel_res/ipcw_weights_group_novel.csv", row.names = FALSE)
-write.csv(disc_per_group, "../novel_res/disc_per_group_novel.csv", row.names = FALSE)
-write.csv(disc_per_glp1, "../novel_res/disc_per_glp1_novel.csv", row.names = FALSE)
-write.csv(weights_summary_overall, "../novel_res/ipcw_weights_overall_novel.csv", row.names = FALSE)
+write.csv(time_summary_by_group, file.path(results_dir, "time_to_censoring_group_novel.csv"), row.names = FALSE)
+write.csv(time_summary_overall, file.path(results_dir, "time_to_censoring_overall_novel.csv"), row.names = FALSE)
+write.csv(weights_summary_by_group, file.path(results_dir, "ipcw_weights_group_novel.csv"), row.names = FALSE)
+write.csv(disc_per_group, file.path(results_dir, "disc_per_group_novel.csv"), row.names = FALSE)
+write.csv(disc_per_glp1, file.path(results_dir, "disc_per_glp1_novel.csv"), row.names = FALSE)
+write.csv(weights_summary_overall, file.path(results_dir, "ipcw_weights_overall_novel.csv"), row.names = FALSE)

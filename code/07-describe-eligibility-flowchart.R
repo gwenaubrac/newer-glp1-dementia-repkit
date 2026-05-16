@@ -4,9 +4,12 @@ library(tidyverse)
 library(here)
 library(dplyr)
 
-here::here()
+project_root <- Sys.getenv("PROJECT_ROOT")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+output_dir  <- file.path(project_root, "output")
+results_dir <- file.path(project_root, "novel_res")
 
-log_path <- "../output/eligibility_log.txt"
+log_path <- file.path(output_dir, "eligibility_log.txt")
 lines <- readr::read_lines(log_path)
 
 # keep lines of interest

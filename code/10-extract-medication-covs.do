@@ -1,3 +1,16 @@
+* ============================================================================
+* Path configuration — source config.sh before running this script
+* ============================================================================
+global PROJECT_ROOT : environment PROJECT_ROOT
+global OUTPUT_DIR   : environment OUTPUT_DIR
+global RESULTS_DIR  : environment RESULTS_DIR
+
+capture confirm string macro $PROJECT_ROOT
+if _rc {
+    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+    exit 1
+}
+
 * this program gets all claims for medication use for patients in the sample
 * and finally an indicator for whether one of those claims occurred during the
 * 1-year prior to baseline which is saved as "cov_med"
@@ -5,7 +18,7 @@
 ssc install gtools
 
 clear
-cd "C:\Path\To\Your\Folder"
+cd "$OUTPUT_DIR"
 
 * first we will get the NDC codes for the medications
 
