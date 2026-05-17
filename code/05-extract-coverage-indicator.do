@@ -1,10 +1,4 @@
-* ============================================================================
-* Path configuration — globals set by run_all.R via the _run_step.do wrapper
-* ============================================================================
-if "$PROJECT_ROOT" == "" {
-    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
-    exit 1
-}
+include "_globals.do"
 
 * We will identify whether patients had continuous coverage in N-month lookback from index date
 * And when their continous coverage ended after index date
@@ -33,9 +27,9 @@ else {
 * ============================================================================
 
 clear
-cd "$OUTPUT_DIR"
+cd "$PROJECT_ROOT"
 
-odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") 
+odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") dsn("$SNOWFLAKE_DSN")
 
 keep if MEDICAL_COVERAGE_INDICATOR==1 & PHARMACY_COVERAGE_INDICATOR==1
 

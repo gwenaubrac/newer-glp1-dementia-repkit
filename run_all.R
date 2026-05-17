@@ -157,6 +157,13 @@ if (opts$dry) {
   quit(save = "no", status = 0)
 }
 
+# --- write Stata globals ------------------------------------------------------
+# Every .do file starts with `include "_globals.do"`. Regenerate it now so that
+# scenario-specific env vars (SCENARIO_NAME, COVERAGE_MONTHS, RESULTS_DIR) are
+# reflected in this run's globals.
+globals_path <- write_globals_do()
+cat(gray(sprintf("Stata globals: %s\n", globals_path)))
+
 # --- runners ------------------------------------------------------------------
 build_argv <- function(engine, script) switch(engine,
   R     = c(R_PATH, script),
@@ -172,7 +179,7 @@ run_tee <- function(argv, log_file) {
   if (IS_WIN) {
     psq <- function(x) sprintf("'%s'", gsub("'", "''", x, fixed = TRUE))
     cmd <- paste(vapply(argv, psq, character(1)), collapse = " ")
-    ps <- sprintf("$ErrorActionPreference='Continue'\n& %s 2>&1 | Tee-Object -FilePath %s\nexit $LASTEXITCODE\n",
+    ps <- sprintf("$ErrorActionPreference='SilentlyContinue'\n& %s 2>&1 | Tee-Object -FilePath %s\nexit $LASTEXITCODE\n",
                   cmd, psq(log_file))
     f <- tempfile(fileext = ".ps1"); writeLines(ps, f); on.exit(unlink(f), add = TRUE)
     system2("powershell", c("-NoProfile","-ExecutionPolicy","Bypass","-File", f), wait = TRUE)
@@ -185,7 +192,8 @@ run_tee <- function(argv, log_file) {
 
 # Stata -b is silent on stdout; it writes <basename>.log to CWD. Run, then
 # copy the log to our run directory, tail it, and scan for `r(NNN);` errors
-# (Stata can return exit 0 even after one).
+# (Stata can return exit 0 even after one). The .do file's first line is
+# `include "_globals.do"`, which sets every $X global from config.R.
 run_stata <- function(argv, script_file, our_log) {
   cat(gray("  (Stata batch mode is silent; output shown after the run completes.)\n"))
   status <- system2(argv[1], argv[-1], wait = TRUE)

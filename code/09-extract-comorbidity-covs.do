@@ -1,10 +1,4 @@
-* ============================================================================
-* Path configuration — globals set by run_all.R via the _run_step.do wrapper
-* ============================================================================
-if "$PROJECT_ROOT" == "" {
-    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
-    exit 1
-}
+include "_globals.do"
 
 * ============================================================================
 * Hospitalization
@@ -17,7 +11,7 @@ gen lookback_date = index_date - 365
 save final_novel, replace
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, ADMISSION_DATE, FROM MEDICAL_HEADERS_LATEST WHERE ADMISSION_DATE IS NOT NULL ;")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, ADMISSION_DATE, FROM MEDICAL_HEADERS_LATEST WHERE ADMISSION_DATE IS NOT NULL ;") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using final_novel, keep(2 3) nogen	
 duplicates drop
 keep PATIENT_ID ADMISSION_DATE
@@ -25,7 +19,7 @@ rename ADMISSION_DATE hosp_date
 save cov_hosp_long, replace
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, SERVICE_FROM,  FROM MEDICAL_SERVICE_LINES_LATEST WHERE EMERGENCY_INDICATOR = 'Y' ;")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, SERVICE_FROM,  FROM MEDICAL_SERVICE_LINES_LATEST WHERE EMERGENCY_INDICATOR = 'Y' ;") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using final_novel, keep(2 3)nogen		
 keep PATIENT_ID SERVICE_FROM
 duplicates drop
@@ -131,14 +125,14 @@ program define get_codes
 
     * first search in medical headers and pull all occurrences of the code with corresponding date
     clear
-    odbc load, exec(`"SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26)) WHERE `where'"')
+    odbc load, exec(`"SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26)) WHERE `where'"') dsn("$SNOWFLAKE_DSN")
     
     tempfile headers_temp
     save `headers_temp'
     
     * now search in service line for procedures and pull all occurrences of codes with corresponding date
     clear
-    odbc load, exec(`"SELECT DISTINCT PATIENT_ID, SERVICE_FROM, code FROM MEDICAL_SERVICE_LINES_LATEST UNPIVOT (code FOR col IN (PROCEDURE, DIAGNOSIS_CODE_1, DIAGNOSIS_CODE_2, DIAGNOSIS_CODE_3, DIAGNOSIS_CODE_4)) WHERE `where'"')
+    odbc load, exec(`"SELECT DISTINCT PATIENT_ID, SERVICE_FROM, code FROM MEDICAL_SERVICE_LINES_LATEST UNPIVOT (code FOR col IN (PROCEDURE, DIAGNOSIS_CODE_1, DIAGNOSIS_CODE_2, DIAGNOSIS_CODE_3, DIAGNOSIS_CODE_4)) WHERE `where'"') dsn("$SNOWFLAKE_DSN")
     rename SERVICE_FROM CLAIM_DATE
          
     * combined medical headers and service line
@@ -266,7 +260,7 @@ program define get_codes_2
 
     * search in medical headers and pull all occurrences of the code with corresponding date
     clear
-    odbc load, exec(`"SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26)) WHERE `where'"')
+    odbc load, exec(`"SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26)) WHERE `where'"') dsn("$SNOWFLAKE_DSN")
 
     * keep only patients in cohort
     merge m:1 PATIENT_ID using final_novel, keep(match) nogen keepusing(PATIENT_ID index_date lookback_date)

@@ -1,10 +1,4 @@
-* ============================================================================
-* Path configuration — globals set by run_all.R via the _run_step.do wrapper
-* ============================================================================
-if "$PROJECT_ROOT" == "" {
-    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
-    exit 1
-}
+include "_globals.do"
 
 * ============================================================================
 * Race and Ethnicity
@@ -12,7 +6,7 @@ if "$PROJECT_ROOT" == "" {
 cd "$OUTPUT_DIR"
 clear 
 
-odbc load, exec("SELECT PATIENT_ID, PATIENT_RACE_ETHNICITY FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_RACE_ETHNICITY_LATEST")
+odbc load, exec("SELECT PATIENT_ID, PATIENT_RACE_ETHNICITY FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_RACE_ETHNICITY_LATEST") dsn("$SNOWFLAKE_DSN")
 merge 1:1 PATIENT_ID using final_novel, keep(2 3) nogen
 keep PATIENT_ID PATIENT_RACE_ETHNICITY
 rename PATIENT_RACE_ETHNICITY race
@@ -25,7 +19,7 @@ save cov_race_novel, replace
 * Region and Plan
 * ============================================================================
 clear
-odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR, PATIENT_STATE, MX_KH_PLAN_ID, RX_KH_PLAN_ID FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") 
+odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR, PATIENT_STATE, MX_KH_PLAN_ID, RX_KH_PLAN_ID FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using final_novel, keep(2 3) nogen keepusing(PATIENT_ID index_date)
 
 keep if ELIGIBILITY_START_DATE<=index_date & index_date<=ELIGIBILITY_END_DATE
@@ -47,7 +41,7 @@ rename plan_pharmacy plan_id
 save plan_pharmacy_novel, replace
 
 clear
-odbc load, exec("SELECT KH_PLAN_ID, INSURANCE_GROUP FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PLANS_LATEST")
+odbc load, exec("SELECT KH_PLAN_ID, INSURANCE_GROUP FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PLANS_LATEST") dsn("$SNOWFLAKE_DSN")
 rename KH_PLAN_ID plan_id
 merge 1:m plan_id using plan_pharmacy_novel
 drop if _merge==1

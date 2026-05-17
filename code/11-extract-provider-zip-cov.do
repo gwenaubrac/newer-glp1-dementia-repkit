@@ -1,10 +1,4 @@
-* ============================================================================
-* Path configuration — globals set by run_all.R via the _run_step.do wrapper
-* ============================================================================
-if "$PROJECT_ROOT" == "" {
-    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
-    exit 1
-}
+include "_globals.do"
 
 cd "$OUTPUT_DIR"
 
@@ -71,7 +65,7 @@ rename PRESCRIBER_NPI PROVIDER_ID
 save final_novel, replace
 
 clear
-odbc load, exec("SELECT PROVIDER_ID, PROVIDER_ZIPCODE FROM PROVIDER_SUMMARIES_LATEST")
+odbc load, exec("SELECT PROVIDER_ID, PROVIDER_ZIPCODE FROM PROVIDER_SUMMARIES_LATEST") dsn("$SNOWFLAKE_DSN")
 merge m:m PROVIDER_ID using final_novel, keep(match) nogen /*match on PROVIDER_ID*/
 keep PATIENT_ID PROVIDER_ID PROVIDER_ZIPCODE
 rename PROVIDER_ZIPCODE zip

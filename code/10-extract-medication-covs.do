@@ -1,10 +1,4 @@
-* ============================================================================
-* Path configuration — globals set by run_all.R via the _run_step.do wrapper
-* ============================================================================
-if "$PROJECT_ROOT" == "" {
-    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
-    exit 1
-}
+include "_globals.do"
 
 * this program gets all claims for medication use for patients in the sample
 * and finally an indicator for whether one of those claims occurred during the
@@ -23,7 +17,7 @@ cd "$OUTPUT_DIR"
 * ============================================================================
 
 
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 
@@ -50,7 +44,7 @@ save ndc_statin_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 
@@ -74,7 +68,7 @@ save ndc_betablocker_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 keep if strpos(KH_THERAPEUTIC_CLASS_ARRAY, "Angiotensin II Receptor Blocker") | strpos(KH_THERAPEUTIC_CLASS_ARRAY, "ARB") | strmatch(PRECISE_GENERIC_NAME,"*SARTAN*")
@@ -94,7 +88,7 @@ save ndc_arb_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 keep if strpos(PRECISE_GENERIC_NAME, "THIAZIDE") | strpos(PRODUCT_NAME, "THIAZIDE")
@@ -113,7 +107,7 @@ save ndc_thiazide_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 
@@ -133,7 +127,7 @@ save ndc_ccb_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 keep if (strpos(KH_THERAPEUTIC_CLASS_ARRAY, "Angiotensin-Converting Enzyme (ACE) Inhibitor") | strmatch(PRECISE_GENERIC_NAME,"*PRIL*"))
@@ -159,7 +153,7 @@ save ndc_aceinhibitor_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 keep if strpos(PRECISE_GENERIC_NAME, "METFORMIN") | strpos(PRODUCT_NAME, "METFORMIN")
@@ -179,7 +173,7 @@ save ndc_metformin_code, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 keep if strpos(PRECISE_GENERIC_NAME, "INSULIN") | strpos(PRODUCT_NAME, "INSULIN")
@@ -261,7 +255,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -384,7 +378,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -507,7 +501,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -628,7 +622,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -749,7 +743,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -869,7 +863,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -988,7 +982,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -1108,7 +1102,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("Snowflake Data 2")
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force

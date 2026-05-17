@@ -1,10 +1,4 @@
-* ============================================================================
-* Path configuration — globals set by run_all.R via the _run_step.do wrapper
-* ============================================================================
-if "$PROJECT_ROOT" == "" {
-    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
-    exit 1
-}
+include "_globals.do"
 
 
 cd "$OUTPUT_DIR"
@@ -45,7 +39,7 @@ forvalues i = 1/4 {
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel1, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -55,7 +49,7 @@ save lookback_diabetes_novel1, replace
 
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") 
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel2, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -65,7 +59,7 @@ save lookback_diabetes_novel2, replace
 
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") 
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel3, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -75,7 +69,7 @@ save lookback_diabetes_novel3, replace
 
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") 
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel4, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -121,7 +115,7 @@ save continuous_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'F01%' OR code LIKE 'F02%' OR code LIKE 'F03%' OR code LIKE 'G30%' OR code LIKE 'F1027%' OR code LIKE 'F1097%' OR code LIKE 'G310%' OR code LIKE 'G3183%');")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'F01%' OR code LIKE 'F02%' OR code LIKE 'F03%' OR code LIKE 'G30%' OR code LIKE 'F1027%' OR code LIKE 'F1097%' OR code LIKE 'G310%' OR code LIKE 'G3183%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -152,7 +146,7 @@ save continuous_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT PATIENT_ID, PATIENT_DEATH_DATE FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_MORTALITY_LATEST")
+odbc load, exec("SELECT PATIENT_ID, PATIENT_DEATH_DATE FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_MORTALITY_LATEST") dsn("$SNOWFLAKE_DSN")
 merge 1:1 PATIENT_ID using continuous_novel, keep(2 3) nogen
 
 keep PATIENT_ID PATIENT_DEATH_DATE
@@ -168,7 +162,7 @@ save dod_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT PATIENT_ID, PATIENT_DOB, PATIENT_GENDER FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_SUMMARIES_LATEST")
+odbc load, exec("SELECT PATIENT_ID, PATIENT_DOB, PATIENT_GENDER FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_SUMMARIES_LATEST") dsn("$SNOWFLAKE_DSN")
 merge 1:1 PATIENT_ID using continuous_novel, keep(match) nogen
 gen age = year(index_date)-year(PATIENT_DOB)
 rename PATIENT_GENDER gender
@@ -184,7 +178,7 @@ save age_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E10%' OR code LIKE 'K85%' OR code LIKE 'K860%' OR code LIKE 'K861%' OR code LIKE 'B252%' OR code LIKE 'E312%' OR code LIKE 'C73%' OR code LIKE 'Z85850%' OR code LIKE 'K3184%');")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E10%' OR code LIKE 'K85%' OR code LIKE 'K860%' OR code LIKE 'K861%' OR code LIKE 'B252%' OR code LIKE 'E312%' OR code LIKE 'C73%' OR code LIKE 'Z85850%' OR code LIKE 'K3184%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= lookback_date
@@ -217,7 +211,7 @@ save contra_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE code LIKE 'Z68%';")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE code LIKE 'Z68%';") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 duplicates drop
 
@@ -238,7 +232,7 @@ save lookback_bmi_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE")
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
 keep if strpos(PRECISE_GENERIC_NAME, "ABLAGLUTIDE") | strpos(PRECISE_GENERIC_NAME, "EXENATIDE") | strpos(PRECISE_GENERIC_NAME, "LIXISENATIDE")
 drop CODE_TYPE PRODUCT_NAME KH_ROUTE_ARRAY KH_THERAPEUTIC_CLASS_ARRAY PRECISE_GENERIC_NAME
@@ -295,7 +289,7 @@ forvalues chunk = 1/`n_chunks' {
     display "Code list sample: " substr("`code_list'", 1, 100) "..."
     
     clear
-    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"')
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     append using `all_rx'
     save `all_rx', replace
     
