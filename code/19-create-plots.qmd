@@ -2,6 +2,7 @@
 title: "Save Plots - Novel GLP1s vs other classes"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -11,6 +12,7 @@ Save KM curves and forest plot for outcome. Update legends, labels, and sizing a
 ## KM Curves
 
 ```{r}
+#| label: km-curves
 library(here)
 library(dplyr)
 library(magrittr)
@@ -22,14 +24,11 @@ library(gt)
 library(patchwork)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
 outcome <- "dementia_allcause"
-
-# repeat this for "data1", "data2", and "data3" to get the curves for each comparison
-cohort_name <- "data1"
 
 end_date <- ymd(Sys.getenv("STUDY_END", unset = "2026-01-01"))
 
@@ -40,142 +39,154 @@ data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
 cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 
 max_fu <- 730
-
-cohort <- get(cohort_name)
 date_name <- paste0("outcome_", outcome, "_date")
 
-if (cohort_name == "data1") {
-  ref <- "SGLT2"
-  index <- "Semaglutide/Tirzepatide"
-} else if (cohort_name == "data2") {
-  ref <- "DPP4"
-  index <- "Semaglutide/Tirzepatide"
-} else if (cohort_name == "data3") {
-  ref <- "Sulfonylureas"
-  index <- "Semaglutide/Tirzepatide"
+# Loop over cohorts so KM curves are produced for all three comparisons.
+# Output filenames already include `cohort_name`, so each iteration writes its
+# own pair of PDFs (km_itt_*_<cohort>_<date>.pdf and km_pp_*_<cohort>_<date>.pdf).
+for (cohort_name in c("data1", "data2", "data3")) {
+
+  cohort <- get(cohort_name)
+
+  if (cohort_name == "data1") {
+    ref <- "SGLT2"
+    index <- "Semaglutide/Tirzepatide"
+  } else if (cohort_name == "data2") {
+    ref <- "DPP4"
+    index <- "Semaglutide/Tirzepatide"
+  } else if (cohort_name == "data3") {
+    ref <- "Sulfonylureas"
+    index <- "Semaglutide/Tirzepatide"
+  }
+
+  cohort$study_end <- end_date
+
+  cohort$itt_exit_date <- pmin(cohort$dod,
+                               # date of death
+                               cohort$cov_end,
+                               # end of coverage
+                               cohort$study_end,
+                               # end of study
+                               cohort$index_date + max_fu,
+                               na.rm = TRUE)
+
+  cohort$f_up_start <- cohort$index_date + 90
+
+  cohort %<>%
+    mutate(
+      itt_event = if_else(
+        !is.na(!!sym(date_name)) &
+          !!sym(date_name) < itt_exit_date &
+          !!sym(date_name) >= f_up_start,
+        1,
+        0
+      ),
+      itt_event_date = if_else(itt_event == 1, !!sym(date_name), NA)
+    )
+
+  cohort %<>%
+    mutate(itt_exit_date = if_else(itt_event == 1, itt_event_date, itt_exit_date))
+
+  cohort$itt_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$itt_exit_date)), 'days')
+
+  cohort %<>% filter(itt_follow_up > 0)
+
+  cohort$pp_exit_date <- pmin(
+    cohort$dod,
+    cohort$cov_end,
+    cohort$study_end,
+    cohort$switch_date,
+    cohort$disc_date,
+    cohort$index_date + max_fu,
+    na.rm = TRUE
+  )
+
+  cohort %<>%
+    mutate(
+      pp_event = if_else(
+        !is.na(!!sym(date_name)) &
+          !!sym(date_name) < pp_exit_date &
+          !!sym(date_name) >= f_up_start,
+        1,
+        0
+      ),
+      pp_event_date = if_else(pp_event == 1, !!sym(date_name), NA)
+    )
+
+  cohort %<>%
+    mutate(pp_exit_date = if_else(pp_event == 1, pp_event_date, pp_exit_date))
+
+
+  cohort$pp_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$pp_exit_date)), 'days')
+
+  cohort %<>% filter(pp_follow_up > 0)
+
+
+  #### CUMULATIVE INCIDENCE CURVES ####
+
+  # ITT plot
+  km_fit <- survfit(Surv(itt_follow_up, itt_event) ~ trt, data = cohort, weights = siptw)
+
+  p <- ggsurvplot(km_fit,
+                  data = cohort,
+                  fun = "event",
+                  pval = TRUE,
+                  conf.int = FALSE,
+                  risk.table = TRUE,
+                  xlab = "Time (days)",
+                  ylab = "Cumulative Incidence",
+                  title = "Cumulative Incidence of All-Cause Dementia",
+                  subtitle = "Intention-to-Treat Approach with IPTW", # adjust
+                  legend.title = "Treatment",
+                  legend.labs = c(ref, index),
+                  palette = c("#009E73", "#CC79A7"),
+                  ylim = c(0, 0.03)) # adjust scale as needed
+
+  print(p)
+
+  pdf(paste0(results_dir, "/km_itt_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+  print(p)
+  dev.off()
+  dev.off()
+  rm(km_fit, p)
+  gc()
+
+
+  # PP plot
+  km_fit <- survfit(Surv(pp_follow_up, pp_event) ~ trt, data = cohort, weights = swfinal)
+
+  p <- ggsurvplot(km_fit,
+                  data = cohort,
+                  fun = "event",
+                  pval = TRUE,
+                  conf.int = FALSE,
+                  risk.table = TRUE,
+                  xlab = "Time (days)",
+                  ylab = "Cumulative Incidence",
+                  title = "Cumulative Incidence of All-Cause Dementia",
+                  subtitle = "Per-Protocol Approach with IPTW + IPCW", # adjust
+                  legend.title = "Treatment",
+                  legend.labs = c(ref, index),
+                  palette = c("#009E73", "#CC79A7"),
+                  ylim = c(0, 0.03)) # adjust scale as needed
+
+  print(p)
+  pdf(paste0(results_dir, "/km_pp_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+  print(p)
+  dev.off()
+  dev.off()
+  rm(km_fit, p)
+  gc()
+
 }
 
-cohort$study_end <- end_date
-
-cohort$itt_exit_date <- pmin(cohort$dod,
-                             # date of death
-                             cohort$cov_end,
-                             # end of coverage
-                             cohort$study_end,
-                             # end of study
-                             cohort$index_date + max_fu,
-                             na.rm = TRUE)
-
-cohort$f_up_start <- cohort$index_date + 90
-
-cohort %<>%
-  mutate (
-    itt_event = if_else(
-      !is.na(!!sym(date_name)) &
-        !!sym(date_name) < itt_exit_date &
-        !!sym(date_name) >= f_up_start,
-      1,
-      0
-    ),
-    itt_event_date = if_else(itt_event == 1, !!sym(date_name), NA)
-  )
-
-cohort %<>%
-  mutate(itt_exit_date = if_else(itt_event == 1, itt_event_date, itt_exit_date))
-
-cohort$itt_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$itt_exit_date)), 'days')
-
-cohort %<>% filter(itt_follow_up > 0)
-
-cohort$pp_exit_date <- pmin(
-  cohort$dod,
-  cohort$cov_end,
-  cohort$study_end,
-  cohort$switch_date,
-  cohort$disc_date,
-  cohort$index_date + max_fu,
-  na.rm = TRUE
-)
-
-cohort %<>%
-  mutate (
-    pp_event = if_else(
-      !is.na(!!sym(date_name)) &
-        !!sym(date_name) < pp_exit_date &
-        !!sym(date_name) >= f_up_start,
-      1,
-      0
-    ),
-    pp_event_date = if_else(pp_event == 1, !!sym(date_name), NA)
-  )
-
-cohort %<>%
-  mutate(pp_exit_date = if_else(pp_event == 1, pp_event_date, pp_exit_date))
-
-
-cohort$pp_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$pp_exit_date)), 'days')
-
-cohort %<>% filter(pp_follow_up > 0)
-
-
-#### CUMULATIVE INCIDENCE CURVES ####
-
-# for ITT plot: 
-km_fit <- survfit(Surv(itt_follow_up, itt_event) ~ trt, data = cohort, weights = siptw)
-
-p <- ggsurvplot(km_fit,
-                data = cohort,
-                fun = "event",
-                pval = TRUE,
-                conf.int = FALSE,
-                risk.table = TRUE,
-                xlab = "Time (days)",
-                ylab = "Cumulative Incidence",
-                title = "Cumulative Incidence of All-Cause Dementia",
-                subtitle = "Intention-to-Treat Approach with IPTW", # adjust 
-                legend.title = "Treatment",
-                legend.labs = c(ref, index),
-                palette = c("#009E73", "#CC79A7"),
-                ylim = c(0, 0.03)) # adjust scale as needed
-
-p
-
-pdf(paste0(results_dir, "/km_itt_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
-print(p)
-dev.off()
-dev.off()
-rm(km_fit, p)
-
-
-# fot PP plot:
-km_fit <- survfit(Surv(pp_follow_up, pp_event) ~ trt, data = cohort, weights = swfinal)
-
-p <- ggsurvplot(km_fit,
-                data = cohort,
-                fun = "event",
-                pval = TRUE,
-                conf.int = FALSE,
-                risk.table = TRUE,
-                xlab = "Time (days)",
-                ylab = "Cumulative Incidence",
-                title = "Cumulative Incidence of All-Cause Dementia",
-                subtitle = "Per-Protocol Approach with IPTW + IPCW", # adjust 
-                legend.title = "Treatment",
-                legend.labs = c(ref, index),
-                palette = c("#009E73", "#CC79A7"),
-                ylim = c(0, 0.03)) # adjust scale as needed
-
-p
-pdf(paste0(results_dir, "/km_pp_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
-print(p)
-dev.off()
-dev.off()
-rm(km_fit, p)
+rm(cohort, cohort_name, ref, index)
 ```
 
 
 # FOREST PLOT
 ```{r}
+#| label: forest-plot
 #### FOREST PLOT ####
 # results are dated, so you can define the dates for the results here:
 date <- "2026-05-07"

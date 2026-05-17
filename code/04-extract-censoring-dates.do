@@ -1,26 +1,15 @@
 * ============================================================================
-* Path configuration — source config.sh before running this script
+* Path configuration — globals set by run_all.R via the _run_step.do wrapper
 * ============================================================================
-global PROJECT_ROOT : environment PROJECT_ROOT
-global OUTPUT_DIR   : environment OUTPUT_DIR
-global RESULTS_DIR  : environment RESULTS_DIR
-
-capture confirm string macro $PROJECT_ROOT
-if _rc {
-    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+if "$PROJECT_ROOT" == "" {
+    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
     exit 1
 }
 
 * note: you have to run the entire script at once
 * since using temporary files
-
-* to check if the code is doing what we want,
-* you can run up to where I commented each 'browse' statement
-* and manually check the gap in fills and disc date calculations
-
 * to change length of the grace period, change from '90' to whatever grace period you want
 
-* please update the cd to your folder:
 cd "$PROJECT_ROOT"
 clear all
 set more off

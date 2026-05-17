@@ -1,21 +1,14 @@
 * ============================================================================
-* Path configuration — source config.sh before running this script
+* Path configuration — globals set by run_all.R via the _run_step.do wrapper
 * ============================================================================
-global PROJECT_ROOT : environment PROJECT_ROOT
-global OUTPUT_DIR   : environment OUTPUT_DIR
-global RESULTS_DIR  : environment RESULTS_DIR
-
-capture confirm string macro $PROJECT_ROOT
-if _rc {
-    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+if "$PROJECT_ROOT" == "" {
+    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
     exit 1
 }
 
 * ============================================================================
 * Race and Ethnicity
 * ============================================================================
-
-* make sure to update the path and go to \output folder
 cd "$OUTPUT_DIR"
 clear 
 
@@ -31,7 +24,6 @@ save cov_race_novel, replace
 * ============================================================================
 * Region and Plan
 * ============================================================================
-
 clear
 odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR, PATIENT_STATE, MX_KH_PLAN_ID, RX_KH_PLAN_ID FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") 
 merge m:1 PATIENT_ID using final_novel, keep(2 3) nogen keepusing(PATIENT_ID index_date)

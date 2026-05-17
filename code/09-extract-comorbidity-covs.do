@@ -1,20 +1,14 @@
 * ============================================================================
-* Path configuration — source config.sh before running this script
+* Path configuration — globals set by run_all.R via the _run_step.do wrapper
 * ============================================================================
-global PROJECT_ROOT : environment PROJECT_ROOT
-global OUTPUT_DIR   : environment OUTPUT_DIR
-global RESULTS_DIR  : environment RESULTS_DIR
-
-capture confirm string macro $PROJECT_ROOT
-if _rc {
-    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+if "$PROJECT_ROOT" == "" {
+    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
     exit 1
 }
 
 * ============================================================================
 * Hospitalization
 * ============================================================================
-
 clear
 cd "$OUTPUT_DIR"
 
@@ -79,7 +73,7 @@ tab emerg_cat
 keep PATIENT_ID emerg_cat
 save cov_emerg_novel, replace
 
-* delete the long format files we don't need
+* delete the long data files we don't need
 erase cov_hosp_long.dta
 erase cov_emerg_long.dta
 
@@ -88,10 +82,9 @@ erase cov_emerg_long.dta
 * Comorbidities
 * ============================================================================
 
-* it's normal that this code takes a very long time to run (several hours depending on size of the cohort)
+* this code takes a while to run (several hours depending on size of the cohort)
 * could work on improving the efficiency!
 
-*program drop get_codes
 clear
 
 global alcohol "F10"
@@ -250,9 +243,8 @@ clear
 get_codes, name(anxiety) codes($anxiety)
 
 
-
-
-* we will break hypertension into bits because run into crashes/memory issues (probably because so common)
+* we will break hypertension into bits because run into crashes/memory issues (likely because this condition is so common)
+* and we will not search service lines for it due to memory issues (only medical headers)
 global hyper1 "I10"
 global hyper2 "I11"
 global hyper3 "I12"
@@ -260,8 +252,6 @@ global hyper4 "I13"
 global hyper5 "I15"
 global hyper6 "I16"
 global hyper7 "I1A N262"
-
-* program without checking service lines for hypertension due to memory issues
 
 program define get_codes_2
     syntax, name(string) codes(string)

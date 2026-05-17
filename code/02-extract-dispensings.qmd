@@ -2,6 +2,7 @@
 title: "Extract Index Medication Dispensings"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -23,7 +24,7 @@ library(dbplyr)
 library(arrow)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -327,7 +328,7 @@ dbDisconnect(con)
 I originally tried to get the discontinuation dates using R, but it was just not possible due to the file size. Could not figure out how to optimize in R, but Stata on the other hand was very efficient. So I converted the files to Stata format. For space, we will delete them after getting the censoring dates later. 
 
 ```{r}
-#|label: convert-stata
+#| label: convert-stata
 library(haven)
 
 dispensings_glp1 <- read_parquet(file.path(output_dir, "dispensings_glp1.parquet"))
@@ -361,4 +362,5 @@ rm(dispensings_liraglutide)
 dispensings_dulaglutide <- read_parquet(file.path(output_dir, "dispensings_dulaglutide.parquet"))
 write_dta(dispensings_dulaglutide, file.path(output_dir, "dispensings_dulaglutide.dta"))
 rm(dispensings_dulaglutide)
+gc()
 ```

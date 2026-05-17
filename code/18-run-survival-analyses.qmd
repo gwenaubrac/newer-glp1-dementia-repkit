@@ -2,6 +2,7 @@
 title: "Survival Analyses - Novel GLP1s vs other classes"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -23,16 +24,17 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 - data3: nvel GLP1 vs sulfo
 
 **Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
-- `weight_method` (`"iptw"` or `"ebal"`): which weight column drives the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP.
+- `weight_method` (`"iptw"` or `"ebal"`): which weight column is used for the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP.
 - `use_ipcw`: if TRUE, the PP analysis combines IPTW (or entropy) with IPCW for switch/discontinuation.
 - `followup_start` (`"after_grace"` or `"index_date"`): start follow-up `index + 90d` (default) or at `index`.
 - `extra_followup_days` (integer): when 0, keep patients with any positive follow-up (original behavior); when N>0, require `follow_up >= N` days in both ITT and PP cohorts.
 
 ```{r}
+#| label: survival-models
 #### LOAD DATA ####
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -181,7 +183,7 @@ for (outcome in c(dementia_outcomes)) {
     summary(cohort$itt_follow_up)
 
     # extra_followup_days == 0 keeps the original >0 filter exactly;
-    # extra_followup_days > 0 requires >= N days (sens8_6mo_followup → 90).
+    # extra_followup_days > 0 requires >= N days (sens8_6mo_followup).
     if (SCENARIO$extra_followup_days <= 0) {
       cohort %<>% filter(itt_follow_up > 0)
     } else {
@@ -383,10 +385,10 @@ for (outcome in c(dementia_outcomes)) {
     
     # Weighted PP model; weight column depends on SCENARIO$weight_method and
     # SCENARIO$use_ipcw:
-    #   iptw, no ipcw → siptw   (main)
-    #   iptw, ipcw    → swfinal (sens4_pp_ipcw)
-    #   ebal, no ipcw → ebal    (sens1_ebal)
-    #   ebal, ipcw    → ebalfinal
+    #   iptw, no ipcw: uses siptw (main)
+    #   iptw, ipcw: uses swfinal (sens4_pp_ipcw)
+    #   ebal, no ipcw: uses ebal (sens1_ebal)
+    #   ebal, ipcw: uses ebalfinal
     cox_mod_pp <- coxph(Surv(pp_follow_up, pp_event) ~ trt,
                             data = cohort,
                             weights = cohort[[pp_weight_col]],
@@ -424,6 +426,7 @@ for (outcome in c(dementia_outcomes)) {
 
 
 rm(cohort, cohort_name, outcome)
+gc()
 
 
 #### SAVE MODEL RESULTS ####
@@ -467,6 +470,7 @@ saveRDS(
 ## FINAL TABLE FOR MANUSCRIPT 
 
 ```{r}
+#| label: save-final-table2
 #### SAVE FINAL TABLE 2 ####
 
 final_tab2_data1 <- summary_table %>%

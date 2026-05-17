@@ -1,18 +1,18 @@
-# This code is optional, but will create a CSV with the number of patients at each step from cohort creation to eligibility
+# This code creates a CSV with the number of patients at each step from cohort creation to eligibility
 
 library(tidyverse)
 library(here)
 library(dplyr)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
 log_path <- file.path(output_dir, "eligibility_log.txt")
 lines <- readr::read_lines(log_path)
 
-# keep lines of interest
+# keep lines of interest from the eligibility log text file
 step_idx <- str_detect(lines, regex(
   "^(Start:|After exclude)",
   ignore_case = TRUE

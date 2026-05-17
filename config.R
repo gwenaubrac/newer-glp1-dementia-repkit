@@ -1,16 +1,11 @@
 # =============================================================================
-# config.R — THE ONLY FILE YOU NEED TO EDIT
+# config.R
 # =============================================================================
-# Set the paths and binaries below, then run the pipeline:
+# Set the paths and binaries below, then run the main script:
 #
 #   macOS:     double-click run_all.command   (or:  Rscript run_all.R)
 #   Windows:   double-click run_all.bat       (or:  Rscript run_all.R)
 #
-# run_all.R sources this file and pushes every value into the environment so
-# that child R, Quarto, and Stata processes all see the same paths.
-#
-# RStudio / interactive R users: the same variables in .Renviron (created by
-# code/00-setup.R) are used by individual scripts when run interactively.
 # =============================================================================
 
 # --- Paths --------------------------------------------------------------------

@@ -2,6 +2,7 @@
 title: "Identify New Users and Create Index Cohorts"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -25,13 +26,13 @@ library(lubridate)
 library(magrittr)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
-# Study period — read from env (set by config.R / config.sh); literals are the
-# fallback for interactive runs where neither config has been sourced.
-study_period_novel <- list(
+# Study period — read from env (set by config.R, which run_all.R sources);
+# literals are the fallback for interactive runs where config.R has not been sourced.
+study_period <- list(
   start = as.Date(Sys.getenv("STUDY_START", unset = "2022-05-01")),
   end   = as.Date(Sys.getenv("STUDY_END",   unset = "2026-01-01"))
 )
@@ -45,7 +46,7 @@ log_lines <- c(
   paste("Time:", format(Sys.time(), "%H:%M:%S")),
   "",
   "Study Periods:",
-  paste0("  Novel GLP1s: ", study_period_novel$start, " to ", study_period_novel$end),
+  paste0("  Novel GLP1s: ", study_period$start, " to ", study_period$end),
   ""
 )
 ```
@@ -147,14 +148,14 @@ To test the code on just a subsample of the dispensings data, run the following 
 # and get earliest DATE_OF_SERVICE among all of these fills
 index_fill_novel <- all_dispensings %>%
   filter(
-    DATE_OF_SERVICE >= study_period_novel$start,
-    DATE_OF_SERVICE <= study_period_novel$end
+    DATE_OF_SERVICE >= study_period$start,
+    DATE_OF_SERVICE <= study_period$end
   ) %>%
     group_by(PATIENT_ID) %>%
     summarise(
       index_date = min(DATE_OF_SERVICE),
-      med_class = first(med_class),  # keeps first value for the patient
-      glp1_med = first(glp1_med),
+      index_class = first(med_class),  # keeps first value for the patient
+      index_glp1 = first(glp1_med),
       PRESCRIBER_NPI = first(PRESCRIBER_NPI),
       .groups = "drop"
     )
@@ -196,7 +197,7 @@ index_date_dispensings <- all_dispensings %>%
 
 head(index_date_dispensings)
 
-# Identify patients with multiple med_class values
+# Identify patients with multiple index_class values
 same_day_multiple_class <- index_date_dispensings %>%
   group_by(PATIENT_ID, index_date) %>%
   summarise(
@@ -237,10 +238,11 @@ log_lines <- c(
 )
 
 rm(excluded_patients)
+gc()
 
 # Now repeat for multiple glp1 medications
 
-# Identify patients with multiple glp1_med values
+# Identify patients with multiple index_glp1 values
 same_day_multiple_glp1 <- index_date_dispensings %>%
   group_by(PATIENT_ID, index_date) %>%
   summarise(
@@ -378,6 +380,7 @@ rm(same_day_multiple_class, same_day_multiple_glp1, prior_use, glp1_breakdown)
 # Save cohort
 write_parquet(index_fill_novel, file.path(output_dir, "index_novel_comparisons.parquet"))
 rm(index_fill_novel)
+gc()
 ```
 
 ## Summary
@@ -392,8 +395,8 @@ index_fill_novel <- read_parquet(file.path(output_dir, "index_novel_comparisons.
 # Create summary table
 cohort_summary <- tibble(
   cohort = "Novel GLP1s Comparisons",
-  study_period_start = study_period_novel$start,
-  study_period_end = study_period_novel$end,
+  study_period_start = study_period$start,
+  study_period_end = study_period$end,
   n_patients = nrow(index_fill_novel)
 )
 
@@ -407,7 +410,7 @@ writeLines(log_lines, file.path(output_dir, "new_user_identification_log.txt"))
 Finally we can also save the cohort for later use in STATA. 
 
 ```{r}
-#|label: convert-stata
+#| label: convert-stata
 
 # Convert to stata for next step where determine continuous coverage
 # because this step is too inefficient in R
@@ -418,7 +421,7 @@ write_dta(index_fill_novel, file.path(output_dir, "index_novel_comparisons.dta")
 We can also delete the dispensings files saved in parquet format as we only need the .dta ones for the next steps (and these files are very bulky). We also won't need the parquet format of the index cohorts. 
 
 ```{r}
-#|label: delete-files
+#| label: delete-files
 
 # delete dispensings parquet files
 file.remove(file.path(output_dir, "dispensings_glp1.parquet"))

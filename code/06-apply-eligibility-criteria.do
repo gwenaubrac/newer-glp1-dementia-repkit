@@ -1,20 +1,12 @@
 * ============================================================================
-* Path configuration — source config.sh before running this script
+* Path configuration — globals set by run_all.R via the _run_step.do wrapper
 * ============================================================================
-global PROJECT_ROOT : environment PROJECT_ROOT
-global OUTPUT_DIR   : environment OUTPUT_DIR
-global RESULTS_DIR  : environment RESULTS_DIR
-
-capture confirm string macro $PROJECT_ROOT
-if _rc {
-    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+if "$PROJECT_ROOT" == "" {
+    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
     exit 1
 }
 
-global STUDY_END : environment STUDY_END
-if "$STUDY_END" == "" global STUDY_END = "2026-01-01"
 
-* make sure to update the path and go to \output folder
 cd "$OUTPUT_DIR"
 clear
 

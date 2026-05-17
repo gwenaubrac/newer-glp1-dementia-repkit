@@ -19,7 +19,7 @@
   require_metformin   = FALSE,           # logical
   coverage_months     = 12L,             # 6 or 12
   followup_start      = "after_grace",   # "after_grace" (index+90d) or "index_date"
-  extra_followup_days = 0L,              # 0 → original >0 filter; >0 → >= N filter
+  extra_followup_days = 0L,              # 0 in main analysis; >N to require additional followup beyond 90 days
   max_baseline_age    = Inf              # numeric; Inf disables the cap
 )
 

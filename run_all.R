@@ -25,20 +25,20 @@ PIPELINE <- list(
   c("04-extract-censoring-dates.do",        "STATA"),
   c("05-extract-coverage-indicator.do",     "STATA"),
   c("06-apply-eligibility-criteria.do",     "STATA"),
-  c("07-describe-eligibility-flowchart.R",  "R"),
+  c("07-create-eligibility-flowchart.R",  "R"),
   c("08-extract-demographic-covs.do",       "STATA"),
   c("09-extract-comorbidity-covs.do",       "STATA"),
   c("10-extract-medication-covs.do",        "STATA"),
   c("11-extract-provider-zip-cov.do",       "STATA"),
-  c("12-merge-covs.do",                     "STATA"),
+  c("12-merge-covariates.do",                     "STATA"),
   c("13-extract-outcome-occurrences.do",    "STATA"),
   c("14-clean-data.qmd",                    "QMD"),
   c("15a-compute-ipcw.qmd",                 "QMD"),
   c("15b-describe-ipcw.R",                  "R"),
   c("16-compute-iptw.qmd",                  "QMD"),
-  c("17-describe-sample.qmd",               "QMD"),
+  c("17-describe-study-sample.qmd",               "QMD"),
   c("18-run-survival-analyses.qmd",         "QMD"),
-  c("19-save-plots.qmd",                    "QMD")
+  c("19-create-plots.qmd",                    "QMD")
 )
 N <- length(PIPELINE)
 step_label <- function(i) sprintf(" [%2d/%d] %-7s %s", i, N,

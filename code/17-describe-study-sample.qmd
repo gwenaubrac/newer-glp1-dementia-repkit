@@ -2,6 +2,7 @@
 title: "Describe Sample - Novel GLP1s vs other classes"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -9,10 +10,11 @@ format: html
 Create a table of baseline characteristics before weighting. Check the standardized mean differences (SMD) before weighting, after IPTW weighting, and after IPCW + IPCW weighting. 
 
 ```{r}
+#| label: describe-sample
 #### DESCRIBE SAMPLE ####
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -223,6 +225,7 @@ sink()
 
 # novel GLP1 vs dpp4
 rm(crude_smd, iptw_smd, crude_smd_lookup, iptw_smd_lookup)
+gc()
 crude_smd  <- sapply(cov_list, compute_smd, data = data2)
 iptw_smd   <- sapply(cov_list, compute_smd, data = data2, weights = data2$iptw)
 
@@ -272,6 +275,7 @@ sink()
 
 # novel GLP1s vs sulfos
 rm(crude_smd, iptw_smd, crude_smd_lookup, iptw_smd_lookup)
+gc()
 crude_smd  <- sapply(cov_list, compute_smd, data = data3)
 iptw_smd   <- sapply(cov_list, compute_smd, data = data3, weights = data3$iptw)
 
@@ -322,6 +326,7 @@ sink()
 ### FINAL TABLE FOR THE MANUSCRIPT
 
 ```{r}
+#| label: save-final-table1
 #### SAVE FINAL TABLE 1 ####
 
 tab1_data1_new <- as.data.frame(tab1_data1)

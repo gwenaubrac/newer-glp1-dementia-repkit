@@ -2,6 +2,7 @@
 title: "Identify Index Medications and Export NDC Codes"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -32,7 +33,7 @@ library(stringr)
 
 # Set working directory to wherever this file is for you
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -274,6 +275,7 @@ drug_reference %>%
 Here we check whether there are NDC codes that correspond to multiple drug classes. If any are found, there will be a warning and you can check which NDC codes, and product names were flagged in the "ndc_overlap_summary.txt". Please check the log to see if there are any NDCs that correspond to multiple medications. If so, please exclude them from the NDC lists, which will later be used to identify patients for inclusion in the cohort. 
 
 ```{r}
+#| label: check-ndc-overlap
 # Check for duplicate NDC11 codes across medication classes
 ndc_overlap <- drug_reference %>%
   mutate(NDC11 = str_pad(as.character(CODE), width = 11, pad = "0")) %>%

@@ -1,32 +1,20 @@
 * ============================================================================
-* Path configuration — source config.sh before running this script
+* Path configuration — globals set by run_all.R via the _run_step.do wrapper
 * ============================================================================
-global PROJECT_ROOT : environment PROJECT_ROOT
-global OUTPUT_DIR   : environment OUTPUT_DIR
-global RESULTS_DIR  : environment RESULTS_DIR
-
-capture confirm string macro $PROJECT_ROOT
-if _rc {
-    display as error "ERROR: PROJECT_ROOT is not set. Run: source config.sh"
+if "$PROJECT_ROOT" == "" {
+    display as error "ERROR: PROJECT_ROOT is not set. Launch the pipeline via run_all.R."
     exit 1
 }
 
-* ============================================================================
-* Study period
-* ============================================================================
-* STUDY_END is set in config.R / config.sh as an ISO YYYY-MM-DD string.
-
-global STUDY_END : environment STUDY_END
-if "$STUDY_END" == "" global STUDY_END = "2026-01-01"
+* We will identify whether patients had continuous coverage in N-month lookback from index date
+* And when their continous coverage ended after index date
+* These dates are saved in "cov_lookback_novel" and "cov_end_novel"
 
 * ============================================================================
 * Sensitivity parameter — coverage lookback period
 * ============================================================================
 * COVERAGE_MONTHS is set by run_sensitivity.R; defaults to 12 (main analysis).
-* Only 6 and 12 are supported; mapping matches the original literal constants.
 
-global COVERAGE_MONTHS : environment COVERAGE_MONTHS
-if "$COVERAGE_MONTHS" == "" global COVERAGE_MONTHS = 12
 
 local cov_months = ${COVERAGE_MONTHS}
 if `cov_months' == 12 {
@@ -40,17 +28,11 @@ else {
     exit 198
 }
 
-* Identify whether patients had continuous coverage in N-month lookback from index date
-* And when their continous coverage ended after index date
-* These dates are saved in "cov_lookback_novel" and "cov_end_novel"
-
-
 * ============================================================================
 * Novel GLP1s comparison
 * ============================================================================
 
 clear
-* make sure to update the path and specify dsn/password as needed with odbc load
 cd "$OUTPUT_DIR"
 
 odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") 
@@ -59,7 +41,6 @@ keep if MEDICAL_COVERAGE_INDICATOR==1 & PHARMACY_COVERAGE_INDICATOR==1
 
 sort PATIENT_ID ELIGIBILITY_START_DATE
 merge m:1 PATIENT_ID using "output\index_novel_comparisons" ,keep(match) nogen
-*browse if ELIGIBILITY_END_DATE < ELIGIBILITY_START_DATE
 
 gen lookback_date = index_date - `lookback_days'
 
@@ -79,7 +60,6 @@ by PATIENT_ID (seg_start seg_end): replace gap = 0 if _n == 1
 
 * Check for any actual gaps (not overlaps or adjacent)
 by PATIENT_ID: egen any_gap = max(gap > 0)
-
 by PATIENT_ID: egen first_cov = min(seg_start)
 by PATIENT_ID: egen last_cov  = max(seg_end)
 format %td first_cov last_cov

@@ -2,6 +2,7 @@
 title: "IPTW Model - Novel GLP1s vs other classes"
 author: "Gwen Aubrac"
 format: html
+embed-resources: true
 ---
 
 ## Overview
@@ -18,11 +19,12 @@ Weights are truncated at the 2.5th and 97.5th percentiles. Entropy balancing wei
 **Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
 - `weight_trimming` + `trimming_pct`: when TRUE, drop patients with propensity scores outside the asymmetric quantile bounds (comparator upper `1 - trimming_pct`, treated lower `trimming_pct`) before computing IPTW.
 
-Entropy balancing weights are computed unconditionally at the end and saved as `ebal` (the `weight_method = "ebal"` scenario uses them in the survival analyses).
+Entropy balancing weights are computed at the end and saved as `ebal` (the `weight_method = "ebal"` scenario uses them in the survival analyses).
 
 Note: trimming before or after computing the weights does not matter.
 
 ```{r}
+#| label: setup
 #### IPTW USING BASELINE COVARIATES ####
 
 library(dplyr)
@@ -31,7 +33,7 @@ library(haven)
 library(tidyr)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -45,10 +47,10 @@ data %<>%
     mutate(
         novel_flag = if_else(index_glp1 == "semaglutide" | index_glp1 == "tirzepatide", 1, 0)
     )
-
 ```
 
 ```{r}
+#| label: iptw-by-cohort
 # data1: sglt2 (ref) vs novel GLP1s (comp)
 data1 <- data %>%
   filter(novel_flag == 1 | index_class == "SGLT2") %>%
@@ -512,10 +514,11 @@ rm(p)
 
 
 ## COMPUTE ENTROPY BALANCING WEIGHTS 
-Sensitivity analysis where use entropy balancing weights instead of IPTW.
+These are not used for the main analysis but are used for one of the sensitivity analyses (ebal weights instead of IPTW). 
 
 ```{r}
-# data 1: 
+#| label: compute-ebal-weights
+# data 1:
 ebal_weights_out1 <- WeightIt::weightit(
   formula = ps_formula,
   data = data1,
@@ -609,6 +612,7 @@ write.table(bal3, file.path(results_dir, "ebal3.csv"), col.names = T, row.names 
 ## SAVE COHORT DATA WITH WEIGHTS
 
 ```{r}
+#| label: combine-and-save-weights
 data1 %<>%
   mutate(
     wfinal = ipcw_switch * ipcw_disc * iptw,
@@ -641,10 +645,10 @@ saveRDS(data3, file.path(output_dir, "data3_novel.rds")) # novel GLP1s vs sulfo
 ```
 
 
-
 ## SAVE MODELS & DESCRIBE WEIGHTS
 
 ```{r}
+#| label: describe-weights
 # save models
 
 sink(file.path(results_dir, "iptw_models_novel.txt"))
