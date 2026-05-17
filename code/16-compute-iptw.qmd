@@ -11,15 +11,16 @@ The emulated trials are as follows:
 - "data2_novel": novel GLP1s vs DPP4
 - "data3_novel": novel GLP1s vs sulfonylureas
 
-Save results in /../novel_res
+Save results in /../results
 
 Weights are truncated at the 2.5th and 97.5th percentiles. Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal".
 
-**Sensitivity analyses instructions**: 
-- Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal". Nothing to change or uncomment. Entropy balancing worked and leads to excellent balance on all covariates in all cohorts. Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal" (nothing to change -- the ebal weights are computed and saved automatically) 
-- Option to perform 2.5% asymmetric trimming to the IPTW weights to improve overlap and focus on population with more equipoise (lines 66-85, lines 226-246, and 377-396)
+**Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
+- `weight_trimming` + `trimming_pct`: when TRUE, drop patients with propensity scores outside the asymmetric quantile bounds (comparator upper `1 - trimming_pct`, treated lower `trimming_pct`) before computing IPTW.
 
-Note: trimming before or after computing the weights does not matter. 
+Entropy balancing weights are computed unconditionally at the end and saved as `ebal` (the `weight_method = "ebal"` scenario uses them in the survival analyses).
+
+Note: trimming before or after computing the weights does not matter.
 
 ```{r}
 #### IPTW USING BASELINE COVARIATES ####
@@ -32,7 +33,11 @@ library(tidyr)
 project_root <- Sys.getenv("PROJECT_ROOT")
 if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
 output_dir  <- file.path(project_root, "output")
-results_dir <- file.path(project_root, "novel_res")
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+
+source(file.path(project_root, "sensitivity.R"))
+SCENARIO <- get_scenario()
+
 data <- readRDS(file.path(output_dir, "ipcw_novel.rds"))
 cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
 
@@ -62,30 +67,25 @@ ps_mod_adj1 <- glm(
   family = binomial()
 )
 
-data1$ps <- predict(ps_mod_adj1, type = "response", newdata = data1) 
+data1$ps <- predict(ps_mod_adj1, type = "response", newdata = data1)
 data1$ps_marg <- predict(ps_mod_crude1, type = "response")
 
-# optional: trim asymetrically at 2.5%
-# perc_upper <- data1 %>%
-#   filter(trt == 0) %>%
-#   summarise(perc_97_5 = quantile(ps, 0.975, na.rm = TRUE))
-
-# perc_lower <- data1 %>%
-#   filter(trt == 1) %>%
-#   summarise(perc_2_5 = quantile(ps, 0.025, na.rm = TRUE))
-
-# data1 %<>%
-#   mutate(
-#     perc_97_5 = round(perc_upper$perc_97_5, 4),
-#     perc_2_5 = round(perc_lower$perc_2_5, 4)
-#   )
-
-
-# nrow(data1)  
-
-# data1 <- data1 %>% filter(ps < perc_97_5 & ps > perc_2_5)
-
-# rm(perc_upper, perc_lower)
+# Sensitivity: asymmetric PS trimming at trimming_pct / (1 - trimming_pct).
+if (isTRUE(SCENARIO$weight_trimming)) {
+  .upper_q <- 1 - SCENARIO$trimming_pct
+  .lower_q <- SCENARIO$trimming_pct
+  perc_upper <- data1 %>% filter(trt == 0) %>%
+    summarise(perc_upper = quantile(ps, .upper_q, na.rm = TRUE))
+  perc_lower <- data1 %>% filter(trt == 1) %>%
+    summarise(perc_lower = quantile(ps, .lower_q, na.rm = TRUE))
+  data1 %<>%
+    mutate(
+      perc_upper = round(perc_upper$perc_upper, 4),
+      perc_lower = round(perc_lower$perc_lower, 4)
+    )
+  data1 <- data1 %>% filter(ps < perc_upper & ps > perc_lower)
+  rm(perc_upper, perc_lower)
+}
 
 data1$iptw <- if_else(data1$trt ==1, 1/data1$ps, 1/(1-data1$ps))
 data1$siptw <- data1$iptw * data1$ps_marg    
@@ -224,29 +224,24 @@ ps_mod_adj2 <- glm(
 )
 
 data2$ps <- predict(ps_mod_adj2, type = "response")
-data2$ps_marg <- predict(ps_mod_crude2, type = "response") 
+data2$ps_marg <- predict(ps_mod_crude2, type = "response")
 
-# optional: trim asymetrically at 2.5%
-# perc_upper <- data2 %>%
-#   filter(trt == 0) %>%
-#   summarise(perc_97_5 = quantile(ps, 0.975, na.rm = TRUE))
-
-# perc_lower <- data2 %>%
-#   filter(trt == 1) %>%
-#   summarise(perc_2_5 = quantile(ps, 0.025, na.rm = TRUE))
-
-# data2 %<>%
-#   mutate(
-#     perc_97_5 = round(perc_upper$perc_97_5, 4),
-#     perc_2_5 = round(perc_lower$perc_2_5, 4)
-#   )
-
-
-# nrow(data2)  
-
-# data2 <- data2 %>% filter(ps < perc_97_5 & ps > perc_2_5)
-
-# rm(perc_upper, perc_lower)
+# Sensitivity: asymmetric PS trimming at trimming_pct / (1 - trimming_pct).
+if (isTRUE(SCENARIO$weight_trimming)) {
+  .upper_q <- 1 - SCENARIO$trimming_pct
+  .lower_q <- SCENARIO$trimming_pct
+  perc_upper <- data2 %>% filter(trt == 0) %>%
+    summarise(perc_upper = quantile(ps, .upper_q, na.rm = TRUE))
+  perc_lower <- data2 %>% filter(trt == 1) %>%
+    summarise(perc_lower = quantile(ps, .lower_q, na.rm = TRUE))
+  data2 %<>%
+    mutate(
+      perc_upper = round(perc_upper$perc_upper, 4),
+      perc_lower = round(perc_lower$perc_lower, 4)
+    )
+  data2 <- data2 %>% filter(ps < perc_upper & ps > perc_lower)
+  rm(perc_upper, perc_lower)
+}
 
 data2$iptw <- if_else(data2$trt ==1, 1/data2$ps, 1/(1-data2$ps))
 data2$siptw <- data2$iptw * data2$ps_marg    
@@ -374,29 +369,25 @@ ps_mod_adj3 <- glm(ps_formula,
                    data = data3
 )
 
-data3$ps <- predict(ps_mod_adj3, type = "response") 
+data3$ps <- predict(ps_mod_adj3, type = "response")
 data3$ps_marg <- predict(ps_mod_crude3, type = "response")
 
-# optional: trim asymetrically at 2.5%
-# perc_upper <- data3 %>%
-#   filter(trt == 0) %>%
-#   summarise(perc_97_5 = quantile(ps, 0.975, na.rm = TRUE))
-
-# perc_lower <- data3 %>%
-#   filter(trt == 1) %>%
-#   summarise(perc_2_5 = quantile(ps, 0.025, na.rm = TRUE))
-
-# data3 %<>%
-#   mutate(
-#     perc_97_5 = round(perc_upper$perc_97_5, 4),
-#     perc_2_5 = round(perc_lower$perc_2_5, 4)
-#   )
-
-# nrow(data3)  
-
-# data3 <- data3 %>% filter(ps < perc_97_5 & ps > perc_2_5)
-
-# rm(perc_upper, perc_lower)
+# Sensitivity: asymmetric PS trimming at trimming_pct / (1 - trimming_pct).
+if (isTRUE(SCENARIO$weight_trimming)) {
+  .upper_q <- 1 - SCENARIO$trimming_pct
+  .lower_q <- SCENARIO$trimming_pct
+  perc_upper <- data3 %>% filter(trt == 0) %>%
+    summarise(perc_upper = quantile(ps, .upper_q, na.rm = TRUE))
+  perc_lower <- data3 %>% filter(trt == 1) %>%
+    summarise(perc_lower = quantile(ps, .lower_q, na.rm = TRUE))
+  data3 %<>%
+    mutate(
+      perc_upper = round(perc_upper$perc_upper, 4),
+      perc_lower = round(perc_lower$perc_lower, 4)
+    )
+  data3 <- data3 %>% filter(ps < perc_upper & ps > perc_lower)
+  rm(perc_upper, perc_lower)
+}
 
 data3$iptw <- if_else(data3$trt ==1, 1/data3$ps, 1/(1-data3$ps))
 data3$siptw <- data3$iptw * data3$ps_marg    

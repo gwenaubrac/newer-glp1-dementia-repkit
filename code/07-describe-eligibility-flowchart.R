@@ -7,7 +7,7 @@ library(dplyr)
 project_root <- Sys.getenv("PROJECT_ROOT")
 if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
 output_dir  <- file.path(project_root, "output")
-results_dir <- file.path(project_root, "novel_res")
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
 log_path <- file.path(output_dir, "eligibility_log.txt")
 lines <- readr::read_lines(log_path)

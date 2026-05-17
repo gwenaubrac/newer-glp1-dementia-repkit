@@ -22,11 +22,11 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 - data2: novel GLP1 vs DPP4
 - data3: nvel GLP1 vs sulfo
 
-**Instructions for sensitivity analyses:**
-- Apply entropy balance weighting by changing iptw -> ebal (lines 234 and 365)
-- Apply IPCW weights to per-protocol analysis by changing iptw to swfinal (line 365)
-- Require an additional 90 days of follow-up: filter to keep patients with at leat 90 days of follow-up in ITT and PP analyses (lines 169 and 302). In that analysis, patients who experience the outcome or are otherwise lost to follow-up within 6 months are excluded. 
-- Include early events and patients with <90 days of follow-up: change follow-up to start on index date (line 146). That analysis still requires at least 1 day of follow-up.  
+**Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
+- `weight_method` (`"iptw"` or `"ebal"`): which weight column drives the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP.
+- `use_ipcw`: if TRUE, the PP analysis combines IPTW (or entropy) with IPCW for switch/discontinuation.
+- `followup_start` (`"after_grace"` or `"index_date"`): start follow-up `index + 90d` (default) or at `index`.
+- `extra_followup_days` (integer): when 0, keep patients with any positive follow-up (original behavior); when N>0, require `follow_up >= N` days in both ITT and PP cohorts.
 
 ```{r}
 #### LOAD DATA ####
@@ -34,7 +34,22 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 project_root <- Sys.getenv("PROJECT_ROOT")
 if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
 output_dir  <- file.path(project_root, "output")
-results_dir <- file.path(project_root, "novel_res")
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+
+source(file.path(project_root, "sensitivity.R"))
+SCENARIO <- get_scenario()
+
+# Resolve weight columns from scenario settings. `siptw`/`swfinal`/`ebal`/`ebalfinal`
+# are columns written by 16-compute-iptw.qmd; see there for their construction.
+itt_weight_col <- if (identical(SCENARIO$weight_method, "ebal")) "ebal" else "siptw"
+pp_weight_col  <- if (identical(SCENARIO$weight_method, "ebal")) {
+  if (isTRUE(SCENARIO$use_ipcw)) "ebalfinal" else "ebal"
+} else {
+  if (isTRUE(SCENARIO$use_ipcw)) "swfinal" else "siptw"
+}
+
+# Follow-up start offset in days from index.
+fu_offset_days <- if (identical(SCENARIO$followup_start, "index_date")) 0L else 90L
 
 library(dplyr)
 library(magrittr)
@@ -45,7 +60,7 @@ library(survminer)
 library(tidyr)
 library(broom)
 
-end_date <- ymd(20260101)
+end_date <- ymd(Sys.getenv("STUDY_END", unset = "2026-01-01"))
 
 data <- readRDS(file.path(output_dir, "data_novel.rds"))
 data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
@@ -142,12 +157,10 @@ for (outcome in c(dementia_outcomes)) {
     
     summary(cohort$itt_exit_date)
 
-    # now we are adding 90 days to index date to start follow up at 90 days
-    # and reduce the influence of early events (likely caused by confounding by indication/reverse causality)
-    cohort$f_up_start <- cohort$index_date + 90
-    
-    # for sensitivity analysis where start follow up immediately: 
-    # cohort$f_up_start <- cohort$index_date
+    # Start follow-up `fu_offset_days` after index (90 for main, 0 for
+    # the sens7_index_followup scenario), to reduce the influence of early
+    # events likely driven by confounding by indication / reverse causality.
+    cohort$f_up_start <- cohort$index_date + fu_offset_days
 
     # create indicator for itt_event
     # no event if no date of event or if occurred after ITT exit
@@ -167,10 +180,13 @@ for (outcome in c(dementia_outcomes)) {
     cohort$itt_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$itt_exit_date)), 'days')
     summary(cohort$itt_follow_up)
 
-    cohort %<>% filter(itt_follow_up>0) 
-    
-    # sensitivity analysis requiring an additional 90 days of follow-up: 
-    # cohort %<>% filter(itt_follow_up>=90) 
+    # extra_followup_days == 0 keeps the original >0 filter exactly;
+    # extra_followup_days > 0 requires >= N days (sens8_6mo_followup → 90).
+    if (SCENARIO$extra_followup_days <= 0) {
+      cohort %<>% filter(itt_follow_up > 0)
+    } else {
+      cohort %<>% filter(itt_follow_up >= SCENARIO$extra_followup_days)
+    }
 
     # fill in info on follow-up
     followup_times <- rbind(
@@ -232,11 +248,12 @@ for (outcome in c(dementia_outcomes)) {
     
     
     
-    # stabilized IPTW weighted model:
-    cox_mod_itt <- coxph(Surv(itt_follow_up, itt_event) ~ trt, 
-                         data = cohort, 
-                         weights = siptw, # change to ebal for entropy balancing weights (sensitivity analysis)
-                         cluster = PATIENT_ID, 
+    # Weighted ITT model; weight column chosen from SCENARIO$weight_method
+    # (siptw for "iptw" scenarios, ebal for "ebal" scenarios).
+    cox_mod_itt <- coxph(Surv(itt_follow_up, itt_event) ~ trt,
+                         data = cohort,
+                         weights = cohort[[itt_weight_col]],
+                         cluster = PATIENT_ID,
                          robust = TRUE)
 
     coxph_p <- cox.zph(cox_mod_itt)$table["trt", "p"]
@@ -301,10 +318,11 @@ for (outcome in c(dementia_outcomes)) {
     cohort$pp_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$pp_exit_date)), 'days')
     summary(cohort$pp_follow_up)
 
-    cohort %<>% filter(pp_follow_up>0)
-
-    # sensitivity analysis requiring an additional 90 days of follow-up: 
-    # cohort %<>% filter(pp_follow_up>=90) 
+    if (SCENARIO$extra_followup_days <= 0) {
+      cohort %<>% filter(pp_follow_up > 0)
+    } else {
+      cohort %<>% filter(pp_follow_up >= SCENARIO$extra_followup_days)
+    }
   
     
     # fill in info on follow-up
@@ -363,12 +381,16 @@ for (outcome in c(dementia_outcomes)) {
     
 
     
-    # stabilized IPTW:
-    cox_mod_pp <- coxph(Surv(pp_follow_up, pp_event) ~ trt, 
-                            data = cohort, 
-                            weights = siptw, # change to ebal (IPTW only) or ebalfinal (ebal + IPCW) for sensitivity analysis using entropy balancing weights
-                            # and change to swfinal for IPTW + IPCW weighting
-                            cluster = PATIENT_ID, 
+    # Weighted PP model; weight column depends on SCENARIO$weight_method and
+    # SCENARIO$use_ipcw:
+    #   iptw, no ipcw → siptw   (main)
+    #   iptw, ipcw    → swfinal (sens4_pp_ipcw)
+    #   ebal, no ipcw → ebal    (sens1_ebal)
+    #   ebal, ipcw    → ebalfinal
+    cox_mod_pp <- coxph(Surv(pp_follow_up, pp_event) ~ trt,
+                            data = cohort,
+                            weights = cohort[[pp_weight_col]],
+                            cluster = PATIENT_ID,
                             robust = TRUE)
 
     coxph_p <- cox.zph(cox_mod_pp)$table["trt", "p"]

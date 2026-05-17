@@ -11,6 +11,9 @@ if _rc {
     exit 1
 }
 
+global STUDY_END : environment STUDY_END
+if "$STUDY_END" == "" global STUDY_END = "2026-01-01"
+
 * make sure to update the path and go to \output folder
 cd "$OUTPUT_DIR"
 clear
@@ -404,10 +407,10 @@ local n_after = r(N)
 file write log "After exclude <90 days of coverage: `n_after' patients" _n
 
 
-drop if index_date > mdy(1,1,2026) 
+drop if index_date > date("$STUDY_END", "YMD")
 count
 local n_after = r(N)
-file write log "After exclude index > January 1 2026: `n_after' patients" _n
+file write log "After exclude index > $STUDY_END: `n_after' patients" _n
 
 
 drop if lookback_glp==1

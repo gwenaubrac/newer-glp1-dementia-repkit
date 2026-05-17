@@ -6,12 +6,12 @@ format: html
 
 ## Overview
 
-Convert appropriate variables to factors, create variable for index year, create missing categories for region, race/ethnicity, and plan type. 
-Save list of relevant covariates in a vector that will be used in next codes for the weighting models. 
+Convert appropriate variables to factors, create variable for index year, create missing categories for region, race/ethnicity, and plan type.
+Save list of relevant covariates in a vector that will be used in next codes for the weighting models.
 
-**Sensitivity analysis:** 
-- Require prior metformin use in 12-months prior to index (lines 194-95)
-- Exclude patients with baseline age >85 (line 198)
+**Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
+- `require_metformin`: restrict to patients with prior metformin and drop it from covariates
+- `max_baseline_age`: drop patients with `age > max_baseline_age`
 
 ```{r}
 ## clean and format covariate data for weighting models
@@ -25,7 +25,11 @@ library(here)
 project_root <- Sys.getenv("PROJECT_ROOT")
 if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
 output_dir  <- file.path(project_root, "output")
-results_dir <- file.path(project_root, "novel_res")
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+
+# Load sensitivity scenario (defaults to `main` if SCENARIO_NAME is unset)
+source(file.path(project_root, "sensitivity.R"))
+SCENARIO <- get_scenario()
 
 data <- read_dta(file.path(output_dir, "covs_novel.dta"))
 
@@ -193,12 +197,17 @@ data$region <- relevel(data$region, ref = "MIDWEST")
 cov_list <- c("age", cov_clinic, cov_demog)
 cov_list
 
-# sensitivity analysis to require prior metformin use:
-# data %<>% filter(metformin == 1)
-# cov_list <- cov_list[!cov_list %in% "metformin"] 
+# Sensitivity: require prior metformin use at baseline (and drop it from covariates,
+# since every retained patient now has metformin == 1).
+if (isTRUE(SCENARIO$require_metformin)) {
+  data %<>% filter(metformin == 1)
+  cov_list <- cov_list[!cov_list %in% "metformin"]
+}
 
-# sensitivity analysis where censor baseline age:
-# data %<>% filter(age <= 85)
+# Sensitivity: cap baseline age (Inf disables the filter).
+if (is.finite(SCENARIO$max_baseline_age)) {
+  data %<>% filter(age <= SCENARIO$max_baseline_age)
+}
 
 saveRDS(cov_list, file.path(output_dir, "cov_list_novel.rds"))
 saveRDS(data, file.path(output_dir, "clean_novel.rds"))

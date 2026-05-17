@@ -27,12 +27,13 @@ library(magrittr)
 project_root <- Sys.getenv("PROJECT_ROOT")
 if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Please run: source config.sh (bash) or set it in .Renviron (RStudio).")
 output_dir  <- file.path(project_root, "output")
-results_dir <- file.path(project_root, "novel_res")
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
-# Define study period
+# Study period — read from env (set by config.R / config.sh); literals are the
+# fallback for interactive runs where neither config has been sourced.
 study_period_novel <- list(
-  start = as.Date("2022-05-01"),
-  end = as.Date("2026-01-01")
+  start = as.Date(Sys.getenv("STUDY_START", unset = "2022-05-01")),
+  end   = as.Date(Sys.getenv("STUDY_END",   unset = "2026-01-01"))
 )
 
 # Initialize log file to keep track of numbers

@@ -11,14 +11,17 @@ if _rc {
     exit 1
 }
 
+global STUDY_END : environment STUDY_END
+if "$STUDY_END" == "" global STUDY_END = "2026-01-01"
+
 * ============================================================================
 * Identify dementia outcome in follow-up
 * ============================================================================
 
-* We will now identify occurrence of the outcome (and negative control outcomes) over the study period. 
+* We will now identify occurrence of the outcome (and negative control outcomes) over the study period.
 
-* Define study end date
-local end_date = mdy(1,1,2026)
+* Define study end date (read from env; falls back to 2026-01-01)
+local end_date = date("$STUDY_END", "YMD")
 cd "$OUTPUT_DIR"
 
 ***all-cause dementia

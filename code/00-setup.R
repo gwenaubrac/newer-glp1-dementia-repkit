@@ -22,7 +22,7 @@ lines <- c(
   "",
   "PROJECT_ROOT=/path/to/your/repo",
   "OUTPUT_DIR=/path/to/your/repo/output",
-  "RESULTS_DIR=/path/to/your/repo/novel_res"
+  "RESULTS_DIR=/path/to/your/repo/results"
 )
 writeLines(lines, ".Renviron")
 

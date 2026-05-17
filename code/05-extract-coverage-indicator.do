@@ -11,13 +11,38 @@ if _rc {
     exit 1
 }
 
+* ============================================================================
+* Study period
+* ============================================================================
+* STUDY_END is set in config.R / config.sh as an ISO YYYY-MM-DD string.
 
-* Identify whether patients had continuous coverage in 1-year lookback from index date
+global STUDY_END : environment STUDY_END
+if "$STUDY_END" == "" global STUDY_END = "2026-01-01"
+
+* ============================================================================
+* Sensitivity parameter — coverage lookback period
+* ============================================================================
+* COVERAGE_MONTHS is set by run_sensitivity.R; defaults to 12 (main analysis).
+* Only 6 and 12 are supported; mapping matches the original literal constants.
+
+global COVERAGE_MONTHS : environment COVERAGE_MONTHS
+if "$COVERAGE_MONTHS" == "" global COVERAGE_MONTHS = 12
+
+local cov_months = ${COVERAGE_MONTHS}
+if `cov_months' == 12 {
+    local lookback_days = 365
+}
+else if `cov_months' == 6 {
+    local lookback_days = 182
+}
+else {
+    display as error "COVERAGE_MONTHS must be 6 or 12 (got: `cov_months')"
+    exit 198
+}
+
+* Identify whether patients had continuous coverage in N-month lookback from index date
 * And when their continous coverage ended after index date
 * These dates are saved in "cov_lookback_novel" and "cov_end_novel"
-
-* For sensitivity analysis using 6-months of lookback instead of 1-year:
-* use "gen lookback_date = index_date - 182" in line 26
 
 
 * ============================================================================
@@ -36,7 +61,7 @@ sort PATIENT_ID ELIGIBILITY_START_DATE
 merge m:1 PATIENT_ID using "output\index_novel_comparisons" ,keep(match) nogen
 *browse if ELIGIBILITY_END_DATE < ELIGIBILITY_START_DATE
 
-gen lookback_date = index_date - 365 /* change to 182 for 6 months coverage requirement instead */
+gen lookback_date = index_date - `lookback_days'
 
 drop if ELIGIBILITY_END_DATE < lookback_date
 drop if ELIGIBILITY_START_DATE > index_date
@@ -80,7 +105,7 @@ merge m:1 PATIENT_ID using "output\index_novel_comparisons"
 keep if _merge==3
 drop _merge
 
-gen study_end = mdy(1,1,2026)
+gen study_end = date("$STUDY_END", "YMD")
 format study_end %td
 drop if ELIGIBILITY_END_DATE < index_date
 drop if ELIGIBILITY_START_DATE > study_end
