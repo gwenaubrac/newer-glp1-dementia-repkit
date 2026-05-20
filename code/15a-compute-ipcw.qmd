@@ -26,26 +26,32 @@ library(huxtable)
 library(broom)
 
 
-end_date <- ymd(Sys.getenv("STUDY_END", unset = "2026-01-01"))
+end_date <- ymd(Sys.getenv("STUDY_END", unset = "2025-12-31"))
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
 
-# create directory to save results in 
+# create directory to save results in
 dir.create(results_dir, recursive = TRUE)
 
-disc_date <- read_dta(file.path(output_dir, "disc_date_novel.dta"))
-switch_date <- read_dta(file.path(output_dir, "switch_date_novel.dta"))
+disc_date   <- read_dta(out_path("disc_date_novel.dta"))
+switch_date <- read_dta(out_path("switch_date_novel.dta"))
 
-data <- readRDS(file.path(output_dir, "clean_novel.rds"))
+data <- readRDS(out_path("clean_novel.rds"))
 
 data <- data %>%
   left_join(disc_date, by = "PATIENT_ID") %>%
   left_join(switch_date, by = "PATIENT_ID")
 
-cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
+cov_list <- readRDS(out_path("cov_list_novel.rds"))
 cov_list
 
 # define discontinuation flag
@@ -96,5 +102,10 @@ data %<>%
 library(gtsummary)
 library(dplyr)
 
-# I had to run the next steps in a separate .R file because of issues with sink() to save the model outputs
+# Persist the prepared inputs so 15b can run independently. 15b loads
+# `data` (with disc/switch flags and switch_type cleaned) and reuses the
+# same cov_list_novel.rds that was loaded above.
+saveRDS(data, file.path(output_dir, "ipcw_input_novel.rds"))
+
+# 15b is a separate .R file because of issues with sink() to save the model outputs
 ```

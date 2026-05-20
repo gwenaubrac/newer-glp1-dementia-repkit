@@ -4,7 +4,7 @@ include "_globals.do"
 * and finally an indicator for whether one of those claims occurred during the
 * 1-year prior to baseline which is saved as "cov_med"
 
-ssc install gtools
+* ssc install gtools
 
 clear
 cd "$OUTPUT_DIR"

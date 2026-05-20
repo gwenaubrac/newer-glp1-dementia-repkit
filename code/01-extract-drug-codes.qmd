@@ -24,7 +24,6 @@ This notebook identifies index medications (GLP-1/GIP agonists and comparators) 
 
 # Load packages
 library(tidyverse)
-library(here)
 library(DBI)
 library(odbc)
 library(dplyr)
@@ -33,7 +32,7 @@ library(stringr)
 
 # Set working directory to wherever this file is for you
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -170,7 +169,14 @@ This step removes NDC codes that correspond to multiple drug classes (more detai
 #| label: remove-multi-ndcs
 
 drug_reference <- drug_reference %>%
-  filter(PRODUCT_NAME != "GLYXAMBI" & PRODUCT_NAME != "QTERN" & PRODUCT_NAME != "STEGLUJAN" & PRODUCT_NAME != "TRIJARDY XR")
+  filter(
+    PRODUCT_NAME != "GLYXAMBI" & PRODUCT_NAME != "QTERN" &
+      PRODUCT_NAME != "STEGLUJAN" & PRODUCT_NAME != "TRIJARDY XR"
+  ) %>%
+  # Belt-and-suspenders for an NDC that listed under a generic combo name
+  # rather than a brand (so the PRODUCT_NAME filter above misses it):
+  # 72205043801 = dapagliflozin-saxagliptin (SGLT2 + DPP4).
+  filter(str_pad(as.character(CODE), width = 11, pad = "0") != "72205043801")
 ```
 
 ## Export NDC Codes

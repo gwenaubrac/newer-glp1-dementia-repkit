@@ -12,7 +12,7 @@ cd "$OUTPUT_DIR"
 
 clear
 
-import delimited "$PROJECT_ROOT/code/acs_zip3_edu_inc.csv"
+import delimited "$PROJECT_ROOT/code/acs_zip_edu_inc.csv"
 drop v1
 
 destring prop_hs, replace force

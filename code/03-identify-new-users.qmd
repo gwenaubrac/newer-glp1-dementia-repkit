@@ -20,21 +20,20 @@ We are starting the study at tirzepatide approval for T2D to avoid an over-repre
 #| message: false
 
 library(tidyverse)
-library(here)
 library(arrow)
 library(lubridate)
 library(magrittr)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
-# Study period — read from env (set by config.R, which run_all.R sources);
+# Study period - read from env (set by config.R, which run_all.R sources);
 # literals are the fallback for interactive runs where config.R has not been sourced.
 study_period <- list(
   start = as.Date(Sys.getenv("STUDY_START", unset = "2022-05-01")),
-  end   = as.Date(Sys.getenv("STUDY_END",   unset = "2026-01-01"))
+  end   = as.Date(Sys.getenv("STUDY_END",   unset = "2025-12-31"))
 )
 
 # Initialize log file to keep track of numbers
@@ -160,13 +159,13 @@ index_fill_novel <- all_dispensings %>%
       .groups = "drop"
     )
 
-message("\nCohort D: Novel GLP1s vs other classes:")
-message("Total patients with a first fill during study period: ", format(nrow(index_fill_novel), big.mark = ","))
+message("\nCohort: Novel GLP1s vs other classes:")
+message("Total patients with a first fill for sema, tirze, dula, lira, SGLT2, DPP4, or sulfo during study period: ", format(nrow(index_fill_novel), big.mark = ","))
 
 log_lines <- c(
   log_lines,
-  "Cohort D: Novel GLP1s vs other classes:",
-  paste0("Total patients with a first fill during study period", format(nrow(index_fill_novel), big.mark = ",")),
+  "Cohort: Novel GLP1s vs other classes:",
+  paste0("Total patients with a first fill for sema, tirze, dula, lira, SGLT2, DPP4, or sulfo during study period", format(nrow(index_fill_novel), big.mark = ",")),
   ""
 )
  

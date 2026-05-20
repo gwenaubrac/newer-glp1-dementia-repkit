@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# run_all.R — runs the GLP-1/dementia replication pipeline end-to-end.
+# run_all.R - runs the GLP-1/dementia replication pipeline end-to-end.
 # Usage: Rscript run_all.R [--dry-run] [--list] [--from N] [--only N] [--help]
 
 IS_WIN <- .Platform$OS.type == "windows"
@@ -61,6 +61,15 @@ while (i <= length(args)) {
     "-h"        = { opts$help <- TRUE },
     "--from"    = { i <- i + 1L; opts$from <- need_int("--from", args[i]) },
     "--only"    = { i <- i + 1L; opts$only <- need_int("--only", args[i]) },
+    "--only-file" = {
+      i <- i + 1L
+      if (i > length(args)) die("--only-file requires a filename", "e.g. --only-file 18-run-survival-analyses.qmd")
+      target <- args[i]
+      idx <- which(vapply(PIPELINE, function(s) identical(s[1], target), logical(1)))
+      if (!length(idx)) die(sprintf("--only-file: %s not in PIPELINE", target),
+                            "Run with --list to see step names.")
+      opts$only <- idx
+    },
     die(sprintf("Unknown argument: %s", args[i]), "Run with --help.")
   )
   i <- i + 1L
@@ -73,6 +82,7 @@ if (opts$help) {
       "  --list      print step list and exit\n",
       "  --from N    start at step N (1-indexed) and run to end\n",
       "  --only N    run only step N\n",
+      "  --only-file F   run only the step whose script is named F\n",
       "  --help, -h  this message\n", sep = "")
   quit(save = "no", status = 0)
 }
@@ -94,11 +104,19 @@ SCRIPT_DIR <- if (length(file_arg)) {
 
 CONFIG <- file.path(SCRIPT_DIR, "config.R")
 if (!file.exists(CONFIG)) die(sprintf("config.R not found at %s", CONFIG))
+
+# Seed PROJECT_ROOT from this script's directory when .Renviron hasn't set it
+# yet. config.R reads PROJECT_ROOT from the env, so this makes a fresh clone
+# work even before 00-setup.R has been run.
+if (!nzchar(Sys.getenv("PROJECT_ROOT"))) Sys.setenv(PROJECT_ROOT = SCRIPT_DIR)
+
 tryCatch(sys.source(CONFIG, envir = globalenv()),
          error = function(e) die(sprintf("Failed to source config.R: %s", conditionMessage(e))))
 
 # --- preflight ----------------------------------------------------------------
-REQ <- c("PROJECT_ROOT","DATA_DIR","OUTPUT_DIR","RESULTS_DIR","R_BIN","QUARTO_BIN","STATA_BIN")
+REQ <- c("PROJECT_ROOT","DATA_DIR","OUTPUT_DIR","MAIN_OUTPUT_DIR","RESULTS_DIR",
+         "R_BIN","QUARTO_BIN","STATA_BIN",
+         "SNOWFLAKE_CLIENT","SNOWFLAKE_COHORT")
 for (v in REQ) {
   if (!exists(v, envir = globalenv(), inherits = FALSE) ||
       !is.character(get(v, envir = globalenv())) ||
@@ -106,16 +124,21 @@ for (v in REQ) {
       !nzchar(get(v, envir = globalenv())))
     die(sprintf("config.R is missing or has empty %s", v))
 }
-if (identical(PROJECT_ROOT, "/path/to/your/repo"))
-  die("PROJECT_ROOT in config.R is still the placeholder.", "Edit config.R.")
-
 PROJECT_ROOT <- normalizePath(PROJECT_ROOT, winslash = "/", mustWork = FALSE)
 if (!dir.exists(PROJECT_ROOT)) die(sprintf("PROJECT_ROOT does not exist: %s", PROJECT_ROOT))
-DATA_DIR    <- normalizePath(DATA_DIR,    winslash = "/", mustWork = FALSE)
-OUTPUT_DIR  <- normalizePath(OUTPUT_DIR,  winslash = "/", mustWork = FALSE)
-RESULTS_DIR <- normalizePath(RESULTS_DIR, winslash = "/", mustWork = FALSE)
+DATA_DIR        <- normalizePath(DATA_DIR,        winslash = "/", mustWork = FALSE)
+OUTPUT_DIR      <- normalizePath(OUTPUT_DIR,      winslash = "/", mustWork = FALSE)
+MAIN_OUTPUT_DIR <- normalizePath(MAIN_OUTPUT_DIR, winslash = "/", mustWork = FALSE)
+RESULTS_DIR     <- normalizePath(RESULTS_DIR,     winslash = "/", mustWork = FALSE)
 Sys.setenv(PROJECT_ROOT = PROJECT_ROOT, DATA_DIR = DATA_DIR, OUTPUT_DIR = OUTPUT_DIR,
-           RESULTS_DIR = RESULTS_DIR, R_BIN = R_BIN, QUARTO_BIN = QUARTO_BIN, STATA_BIN = STATA_BIN)
+           MAIN_OUTPUT_DIR = MAIN_OUTPUT_DIR,
+           RESULTS_DIR = RESULTS_DIR, R_BIN = R_BIN, QUARTO_BIN = QUARTO_BIN, STATA_BIN = STATA_BIN,
+           SNOWFLAKE_CLIENT = SNOWFLAKE_CLIENT, SNOWFLAKE_COHORT = SNOWFLAKE_COHORT)
+
+# Make sure the per-run output + results folders exist before any step writes
+# to them (main = results/main; sensitivity scenarios = results/<scenario>).
+dir.create(OUTPUT_DIR,  recursive = TRUE, showWarnings = FALSE)
+dir.create(RESULTS_DIR, recursive = TRUE, showWarnings = FALSE)
 
 resolve_exe <- function(x, lbl) {
   if (file.exists(x) && !dir.exists(x)) return(normalizePath(x, winslash = "/", mustWork = FALSE))
@@ -201,7 +224,14 @@ run_stata <- function(argv, script_file, our_log) {
   stata_log <- file.path(PROJECT_ROOT, log_name)
   if (file.exists(stata_log)) {
     lines <- tryCatch(readLines(stata_log, warn = FALSE), error = function(e) character(0))
-    file.copy(stata_log, our_log, overwrite = TRUE)
+    # Move (not copy) into LOG_DIR so the project root doesn't accumulate
+    # duplicate <step>.log files between runs.
+    if (file.exists(our_log)) file.remove(our_log)
+    moved <- file.rename(stata_log, our_log)
+    if (!moved) {
+      file.copy(stata_log, our_log, overwrite = TRUE)
+      file.remove(stata_log)
+    }
     cat(gray(sprintf("  --- last 30 lines of %s ---\n", log_name)))
     if (length(lines)) cat(paste(tail(lines, 30), collapse = "\n"), "\n", sep = "")
     cat(gray("  --- end ---\n"))
@@ -224,7 +254,7 @@ to_run <- (
   else                        seq_len(N)
 )
 
-LOG_DIR <- file.path(PROJECT_ROOT, "logs", format(Sys.time(), "%Y%m%d_%H%M%S"))
+LOG_DIR <- file.path(PROJECT_ROOT, "logs", format(Sys.time(), "%Y%m%d"))
 dir.create(LOG_DIR, recursive = TRUE, showWarnings = FALSE)
 cat(gray(sprintf("Logs: %s\n", LOG_DIR)))
 

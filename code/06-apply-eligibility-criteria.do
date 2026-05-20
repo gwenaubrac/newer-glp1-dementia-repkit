@@ -4,7 +4,9 @@ include "_globals.do"
 cd "$OUTPUT_DIR"
 clear
 
-use index_novel_comparisons, clear
+* Upstream file produced by step 03 (not re-run by sensitivity scenarios);
+* read explicitly from main's output so sens6 works with cwd = scenario.
+use "$MAIN_OUTPUT_DIR/index_novel_comparisons.dta", clear
 count
 local before_merge = r(N)
 merge m:1 PATIENT_ID using cov_lookback_novel, keep(match) nogen
@@ -13,10 +15,14 @@ count
 local after_merge = r(N)
 save continuous_novel, replace
 
-file open log using "merge_counts.txt", write append
+* Lines 2 and 3 below are consumed by 19-create-plots.qmd to populate the first
+* two boxes of figure-1-flowchart. Keep the "BOX 1" / "BOX 2" labels and the
+* "N=<value>" trailing format so the parser stays simple. We use `replace`
+* (not `append`) so reruns of the pipeline overwrite cleanly.
+file open log using "merge_counts.txt", write replace
 file write log "Merge: index_novel_level with cov_lookback_novel" _n
-file write log "Patients before merge: `before_merge'" _n
-file write log "Patients after merge: `after_merge'" _n
+file write log "BOX 1 - Before requiring continuous coverage: N=`before_merge'" _n
+file write log "BOX 2 - After requiring continuous coverage: N=`after_merge'" _n
 file close log
 
 use continuous_novel, clear
@@ -39,7 +45,7 @@ forvalues i = 1/4 {
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel1, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -49,7 +55,7 @@ save lookback_diabetes_novel1, replace
 
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel2, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -59,7 +65,7 @@ save lookback_diabetes_novel2, replace
 
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel3, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -69,7 +75,7 @@ save lookback_diabetes_novel3, replace
 
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel4, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -115,7 +121,7 @@ save continuous_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'F01%' OR code LIKE 'F02%' OR code LIKE 'F03%' OR code LIKE 'G30%' OR code LIKE 'F1027%' OR code LIKE 'F1097%' OR code LIKE 'G310%' OR code LIKE 'G3183%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'F01%' OR code LIKE 'F02%' OR code LIKE 'F03%' OR code LIKE 'G30%' OR code LIKE 'F1027%' OR code LIKE 'F1097%' OR code LIKE 'G310%' OR code LIKE 'G3183%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= index_date-365
@@ -146,7 +152,7 @@ save continuous_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT PATIENT_ID, PATIENT_DEATH_DATE FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_MORTALITY_LATEST") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT PATIENT_ID, PATIENT_DEATH_DATE FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_MORTALITY_LATEST") dsn("$SNOWFLAKE_DSN")
 merge 1:1 PATIENT_ID using continuous_novel, keep(2 3) nogen
 
 keep PATIENT_ID PATIENT_DEATH_DATE
@@ -162,7 +168,7 @@ save dod_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT PATIENT_ID, PATIENT_DOB, PATIENT_GENDER FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_SUMMARIES_LATEST") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT PATIENT_ID, PATIENT_DOB, PATIENT_GENDER FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_SUMMARIES_LATEST") dsn("$SNOWFLAKE_DSN")
 merge 1:1 PATIENT_ID using continuous_novel, keep(match) nogen
 gen age = year(index_date)-year(PATIENT_DOB)
 rename PATIENT_GENDER gender
@@ -178,7 +184,7 @@ save age_novel, replace
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E10%' OR code LIKE 'K85%' OR code LIKE 'K860%' OR code LIKE 'K861%' OR code LIKE 'B252%' OR code LIKE 'E312%' OR code LIKE 'C73%' OR code LIKE 'Z85850%' OR code LIKE 'K3184%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E10%' OR code LIKE 'K85%' OR code LIKE 'K860%' OR code LIKE 'K861%' OR code LIKE 'B252%' OR code LIKE 'E312%' OR code LIKE 'C73%' OR code LIKE 'Z85850%' OR code LIKE 'K3184%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= lookback_date
@@ -391,12 +397,6 @@ drop if cov_end < index_date + 90
 count
 local n_after = r(N)
 file write log "After exclude <90 days of coverage: `n_after' patients" _n
-
-
-drop if index_date > date("$STUDY_END", "YMD")
-count
-local n_after = r(N)
-file write log "After exclude index > $STUDY_END: `n_after' patients" _n
 
 
 drop if lookback_glp==1

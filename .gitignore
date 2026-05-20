@@ -8,3 +8,11 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# Pipeline
+logs/
+_globals.do
+
+# Quarto
+code/*_files/
+code/*.html

@@ -16,7 +16,6 @@ This notebook extracts pharmacy claims for index medications from Snowflake, cre
 #| message: false
 
 library(tidyverse)
-library(here)
 library(DBI)
 library(odbc)
 library(dplyr)
@@ -24,7 +23,7 @@ library(dbplyr)
 library(arrow)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
@@ -53,8 +52,10 @@ log_lines <- c(
 #| message: false
 
 # Set Snowflake context to pharmacy data
-DBI::dbExecute(con, "USE DATABASE DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD")
-DBI::dbExecute(con, "USE SCHEMA COHORT_1302462")
+# Snowflake database (client) and schema (cohort) are configurable via
+# SNOWFLAKE_CLIENT / SNOWFLAKE_COHORT in config.R.
+DBI::dbExecute(con, sprintf('USE DATABASE %s', Sys.getenv("SNOWFLAKE_CLIENT")))
+DBI::dbExecute(con, sprintf('USE SCHEMA %s',   Sys.getenv("SNOWFLAKE_COHORT")))
 
 # Load pharmacy claims table (read-only)
 pharmacy_tbl <- tbl(con, "PHARMACY_LATEST")

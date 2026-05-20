@@ -1,7 +1,26 @@
+library(dplyr)
+library(magrittr)
+library(broom)
+library(gtsummary)
+library(huxtable)
+
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
+
+# Inputs prepared by 15a-compute-ipcw.qmd. Loading them here lets 15b run
+# standalone (e.g. via `Rscript code/15b-describe-ipcw.R`) without depending
+# on the prior step's in-memory objects.
+data     <- readRDS(out_path("ipcw_input_novel.rds"))
+cov_list <- readRDS(out_path("cov_list_novel.rds"))
 
 #### SWITCH MODEL SEPARATELY BY TREATMENT ####
 

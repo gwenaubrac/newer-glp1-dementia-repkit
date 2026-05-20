@@ -14,20 +14,28 @@ Create a table of baseline characteristics before weighting. Check the standardi
 #### DESCRIBE SAMPLE ####
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+is_main <- !nzchar(Sys.getenv("SCENARIO_NAME")) ||
+  identical(Sys.getenv("SCENARIO_NAME"), "main")
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
 
 library(dplyr)
 library(magrittr)
 library(table1)
 library(smd)
 
-data <- readRDS(file.path(output_dir, "data_novel.rds"))
-data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
-data2 <- readRDS(file.path(output_dir, "data2_novel.rds"))
-data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
-cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
+data     <- readRDS(out_path("data_novel.rds"))
+data1    <- readRDS(out_path("data1_novel.rds"))
+data2    <- readRDS(out_path("data2_novel.rds"))
+data3    <- readRDS(out_path("data3_novel.rds"))
+cov_list <- readRDS(out_path("cov_list_novel.rds"))
 
 data1$trt <- factor(data1$trt, levels = c(0, 1), labels = c("SGLT2 Inhibitors", "Novel GLP1 Agonists"))
 data2$trt <- factor(data2$trt, levels = c(0, 1), labels = c("DPP4 Inhibitors", "Novel GLP1 Agonists"))
@@ -351,7 +359,79 @@ final_tab1 <- data.frame(
 
 write.csv(
   final_tab1,
-  paste0(results_dir, "/final_tab1_", Sys.Date(), ".csv"),
+  file.path(results_dir, "final_tab1.csv"),
   row.names = FALSE
 )
+
+# Manuscript table 1: only written on the main run; sensitivity scenarios
+# skip this so they don't overwrite main's manuscript copy.
+if (is_main) {
+manuscript_tab_dir <- file.path(project_root, "manuscript", "tables")
+dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+manuscript_tab1 <- final_tab1[, c("var", "sglt2", "smd_sglt2",
+                                  "dpp4", "smd_dpp4",
+                                  "sulfo", "smd_sulfo")]
+
+# Title-case race/region category labels (source data has them in ALL CAPS).
+title_targets <- c("WHITE","BLACK","ASIAN","HISPANIC","OTHER","MISSING",
+                   "MIDWEST","NORTHEAST","SOUTH","WEST")
+title_case <- function(s) paste0(toupper(substr(s,1,1)), tolower(substr(s,2,nchar(s))))
+.var <- manuscript_tab1$var
+.trim <- trimws(.var)
+for (i in which(.trim %in% title_targets)) {
+  lead <- sub("^([[:space:]]*).*$", "\\1", .var[i])
+  .var[i] <- paste0(lead, title_case(.trim[i]))
+}
+manuscript_tab1$var <- .var
+
+# Add thousands separators to integers with 4+ digits inside cells. Handles
+# patterns like "12345" and "12345 (45%)" without touching decimals.
+add_commas <- function(x) {
+  vapply(x, function(s) {
+    if (is.na(s)) return(s)
+    m <- gregexpr("(?<![.\\d])\\d{4,}(?!\\d)", s, perl = TRUE)[[1]]
+    if (m[1] == -1L) return(s)
+    starts <- as.integer(m); lens <- attr(m, "match.length")
+    for (j in rev(seq_along(starts))) {
+      num <- as.integer(substr(s, starts[j], starts[j] + lens[j] - 1L))
+      s <- paste0(substr(s, 1L, starts[j] - 1L),
+                  formatC(num, big.mark = ",", format = "d"),
+                  substr(s, starts[j] + lens[j], nchar(s)))
+    }
+    s
+  }, character(1), USE.NAMES = FALSE)
+}
+manuscript_tab1[] <- lapply(manuscript_tab1, add_commas)
+
+# Footnote marker on "Age (years)" row (footnote b).
+age_rows <- grepl("^[[:space:]]*Age \\(years\\)\\s*$", manuscript_tab1$var)
+manuscript_tab1$var[age_rows] <- sub("(Age \\(years\\))", "\\1 b",
+                                     manuscript_tab1$var[age_rows])
+
+# Footnote marker on each "IPTW SMD" header (footnote a).
+colnames(manuscript_tab1) <- c("Variable",
+                                "SGLT2 Inhibitors", "IPTW SMD a",
+                                "DPP4 Inhibitors",  "IPTW SMD a",
+                                "Sulfonylureas",    "IPTW SMD a")
+
+# Append footnote rows at the bottom of the table.
+# Build footnotes positionally so the duplicate "IPTW SMD a" column names
+# don't get collapsed by setdiff() (which would leave the data frame with
+# fewer columns than manuscript_tab1 and break rbind).
+footnotes <- as.data.frame(
+  matrix("", nrow = 2, ncol = ncol(manuscript_tab1)),
+  stringsAsFactors = FALSE
+)
+colnames(footnotes) <- colnames(manuscript_tab1)
+footnotes[, 1] <- c(
+  "a. Differences between GLP-1 agonists and the comparator medication on the left.",
+  "b. For privacy reasons, age is top-coded at 89 years. Patients aged 89 and above are represented as age 89."
+)
+manuscript_tab1 <- rbind(manuscript_tab1, footnotes)
+
+write.table(manuscript_tab1,
+            file.path(manuscript_tab_dir, "table-1-patient-char.csv"),
+            sep = ",", row.names = FALSE, col.names = TRUE, qmethod = "double")
+}  # /is_main
 ```

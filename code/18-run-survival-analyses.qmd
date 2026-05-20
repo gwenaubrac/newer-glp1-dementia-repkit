@@ -23,7 +23,7 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 - data2: novel GLP1 vs DPP4
 - data3: nvel GLP1 vs sulfo
 
-**Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
+**Sensitivity-controlled options** (set by `SCENARIO` - see `sensitivity.R`):
 - `weight_method` (`"iptw"` or `"ebal"`): which weight column is used for the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP.
 - `use_ipcw`: if TRUE, the PP analysis combines IPTW (or entropy) with IPCW for switch/discontinuation.
 - `followup_start` (`"after_grace"` or `"index_date"`): start follow-up `index + 90d` (default) or at `index`.
@@ -34,9 +34,17 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 #### LOAD DATA ####
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+is_main <- !nzchar(Sys.getenv("SCENARIO_NAME")) ||
+  identical(Sys.getenv("SCENARIO_NAME"), "main")
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
 
 source(file.path(project_root, "sensitivity.R"))
 SCENARIO <- get_scenario()
@@ -62,13 +70,13 @@ library(survminer)
 library(tidyr)
 library(broom)
 
-end_date <- ymd(Sys.getenv("STUDY_END", unset = "2026-01-01"))
+end_date <- ymd(Sys.getenv("STUDY_END", unset = "2025-12-31"))
 
-data <- readRDS(file.path(output_dir, "data_novel.rds"))
-data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
-data2 <- readRDS(file.path(output_dir, "data2_novel.rds"))
-data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
-cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
+data     <- readRDS(out_path("data_novel.rds"))
+data1    <- readRDS(out_path("data1_novel.rds"))
+data2    <- readRDS(out_path("data2_novel.rds"))
+data3    <- readRDS(out_path("data3_novel.rds"))
+cov_list <- readRDS(out_path("cov_list_novel.rds"))
 
 max_fu <- 730 # truncate follow-up up to 2 years after entry
 
@@ -433,7 +441,7 @@ gc()
 
 write.csv(
   followup_times,
-  paste0(results_dir, "/followup_times_", Sys.Date(), ".csv"),
+  file.path(results_dir, "followup_times.csv"),
   row.names = FALSE
 )
 
@@ -444,7 +452,7 @@ cox_ph %<>%
 
 write.csv(
   cox_ph,
-  paste0(results_dir, "/cox_ph_", Sys.Date(), ".csv"),
+  file.path(results_dir, "cox_ph.csv"),
   row.names = FALSE
 )
 
@@ -456,13 +464,13 @@ summary_table <- summary_table %>%
 
 write.csv(
   summary_table,
-  paste0(results_dir, "/all_cox_results_", Sys.Date(), ".csv"),
+  file.path(results_dir, "all_cox_results.csv"),
   row.names = FALSE
 )
 
 saveRDS(
   summary_table,
-  paste0(results_dir, "/all_cox_results_novel_", Sys.Date(), ".rds")
+  file.path(results_dir, "all_cox_results_novel.rds")
 )
 
 ```
@@ -504,7 +512,94 @@ row.names(final_tab2) <- c("ITT", "PP")
 
 write.csv(
   final_tab2,
-  paste0(results_dir, "/final_tab2_", Sys.Date(), ".csv"),
+  file.path(results_dir, "final_tab2.csv"),
   row.names = FALSE
 )
+```
+
+## MANUSCRIPT TABLES
+
+```{r}
+#| label: manuscript-nco-and-results
+# Manuscript tables are written only on the main run; sensitivity scenarios
+# would otherwise overwrite main's manuscript copies in the shared folder.
+if (!is_main) knitr::knit_exit()
+
+manuscript_tab_dir <- file.path(project_root, "manuscript", "tables")
+dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+cohort_cols <- c(
+  data1 = "HR (95% CI)\nGLP1s vs SGLT2s",
+  data2 = "HR (95% CI)\nGLP1s vs DPP4s",
+  data3 = "HR (95% CI)\nGLP1s vs Sulfonylureas"
+)
+
+fmt_hr <- function(st, app, out = "dementia_allcause") {
+  vapply(names(cohort_cols), function(coh) {
+    r <- st %>% filter(cohort == coh, outcome == out, approach == app)
+    if (nrow(r) == 1) sprintf("%.2f (%.2f-%.2f)", r$hr, r$ci_lower, r$ci_upper)
+    else NA_character_
+  }, character(1))
+}
+
+#### e-Table 4: Negative Control Outcomes (IPTW-weighted ITT) ####
+nco_labels <- c(
+  appendicitis = "Appendicitis",
+  tooth        = "Traumatic tooth fracture",
+  bell         = "Bell's Palsy",
+  basal        = "Basal cell carcinoma"
+)
+
+e_tab4 <- do.call(rbind, lapply(names(nco_labels), function(out) {
+  c(`Negative Control Outcome` = nco_labels[[out]], fmt_hr(summary_table, "itt", out = out))
+}))
+e_tab4 <- as.data.frame(e_tab4, stringsAsFactors = FALSE)
+colnames(e_tab4) <- c("Negative Control Outcome", unname(cohort_cols))
+write.table(e_tab4,
+            file.path(manuscript_tab_dir, "e-table-4-nco.csv"),
+            sep = ",", row.names = FALSE, col.names = TRUE, qmethod = "double")
+```
+
+```{r}
+#| label: manuscript-table-2-results
+#| warning: false
+
+# Table 2 aggregates the main analysis with every sensitivity scenario run
+# so far. We only build it on the main run; sensitivity invocations write to
+# their own RESULTS_DIR/<scenario>/ subfolder, which this scanner reads from.
+scenario_name <- Sys.getenv("SCENARIO_NAME", unset = "main")
+is_main <- !nzchar(scenario_name) || identical(scenario_name, "main")
+
+if (is_main) {
+  source(file.path(project_root, "sensitivity.R"))
+
+  rows <- list()
+  rows[[length(rows) + 1]] <- c("Primary Analysis", "", "", "")
+  rows[[length(rows) + 1]] <- c("  Crude", fmt_hr(summary_table, "itt_crude"))
+  rows[[length(rows) + 1]] <- c("  IPTW",  fmt_hr(summary_table, "itt"))
+  rows[[length(rows) + 1]] <- c("Sensitivity analyses", "", "", "")
+
+  # Sensitivity scenarios save their rds to results/<scenario>/, i.e. a
+  # sibling of main's results dir (results/main/).
+  scenarios_root <- dirname(results_dir)
+  for (nm in names(SENSITIVITY_SCENARIOS)) {
+    sens_rds <- file.path(scenarios_root, nm, "all_cox_results_novel.rds")
+    if (!file.exists(sens_rds)) next
+    sens_st <- readRDS(sens_rds)
+    app <- if (identical(nm, "sens4_pp_ipcw")) "pp" else "itt"
+    rows[[length(rows) + 1]] <- c(
+      paste0("  ", SENSITIVITY_SCENARIOS[[nm]]$label),
+      fmt_hr(sens_st, app)
+    )
+  }
+
+  tab2 <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
+  colnames(tab2) <- c("Analysis", unname(cohort_cols))
+  write.table(tab2,
+              file.path(manuscript_tab_dir, "table-2-results.csv"),
+              sep = ",", row.names = FALSE, col.names = TRUE, qmethod = "double")
+} else {
+  message("Skipping table-2-results: SCENARIO_NAME='", scenario_name,
+          "' - table 2 is only assembled on the main run.")
+}
 ```

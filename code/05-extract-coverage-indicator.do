@@ -5,7 +5,7 @@ include "_globals.do"
 * These dates are saved in "cov_lookback_novel" and "cov_end_novel"
 
 * ============================================================================
-* Sensitivity parameter — coverage lookback period
+* Sensitivity parameter - coverage lookback period
 * ============================================================================
 * COVERAGE_MONTHS is set by run_sensitivity.R; defaults to 12 (main analysis).
 
@@ -27,14 +27,17 @@ else {
 * ============================================================================
 
 clear
-cd "$PROJECT_ROOT"
+* Writes go to $OUTPUT_DIR (= main's output for main runs, scenario's output
+* for sensitivity). Upstream reads (index_novel_comparisons was produced by
+* step 03, which sensitivity scenarios don't re-run) use $MAIN_OUTPUT_DIR.
+cd "$OUTPUT_DIR"
 
-odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_ENROLLMENT_LATEST") dsn("$SNOWFLAKE_DSN")
 
 keep if MEDICAL_COVERAGE_INDICATOR==1 & PHARMACY_COVERAGE_INDICATOR==1
 
 sort PATIENT_ID ELIGIBILITY_START_DATE
-merge m:1 PATIENT_ID using "output\index_novel_comparisons" ,keep(match) nogen
+merge m:1 PATIENT_ID using "$MAIN_OUTPUT_DIR/index_novel_comparisons" ,keep(match) nogen
 
 gen lookback_date = index_date - `lookback_days'
 
@@ -65,17 +68,17 @@ keep PATIENT_ID
 
 duplicates drop
 
-save "output\cov_lookback_novel", replace
+save "cov_lookback_novel", replace
 
 
 clear
-odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM DSVC_RWJF_BU_AA_RE_ENCOUNTERS_PROD.COHORT_1302462.PATIENT_ENROLLMENT_LATEST") 
+odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_ENROLLMENT_LATEST") 
 
 keep if MEDICAL_COVERAGE_INDICATOR==1
 keep if PHARMACY_COVERAGE_INDICATOR==1
 
 sort PATIENT_ID ELIGIBILITY_START_DATE
-merge m:1 PATIENT_ID using "output\index_novel_comparisons"
+merge m:1 PATIENT_ID using "$MAIN_OUTPUT_DIR/index_novel_comparisons"
 keep if _merge==3
 drop _merge
 
@@ -103,4 +106,4 @@ format cov_end %td
 keep PATIENT_ID cov_end
 collapse (min) cov_end, by(PATIENT_ID)
 
-save "output\cov_end_novel", replace
+save "cov_end_novel", replace

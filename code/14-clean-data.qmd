@@ -10,7 +10,7 @@ embed-resources: true
 Convert appropriate variables to factors, create variable for index year, create missing categories for region, race/ethnicity, and plan type.
 Save list of relevant covariates in a vector that will be used in next codes for the weighting models.
 
-**Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
+**Sensitivity-controlled options** (set by `SCENARIO` - see `sensitivity.R`):
 - `require_metformin`: restrict to patients with prior metformin and drop it from covariates
 - `max_baseline_age`: drop patients with `age > max_baseline_age`
 
@@ -22,26 +22,34 @@ library(dplyr)
 library(magrittr)
 library(haven)
 library(lubridate)
-library(here)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+# Reads of upstream files fall back to main's output when running a
+# sensitivity scenario (OUTPUT_DIR is per-scenario; MAIN_OUTPUT_DIR is main).
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
 
 # Load sensitivity scenario (defaults to `main` if SCENARIO_NAME is unset)
 source(file.path(project_root, "sensitivity.R"))
 SCENARIO <- get_scenario()
 
-data <- read_dta(file.path(output_dir, "covs_novel.dta"))
+data <- read_dta(out_path("covs_novel.dta"))
 
 summary(data$bmi)
 
 # should be empty
 test <- data %>% filter(is.na(bmi))
 
-# one person with missing bmi -- exclude them 
+# one person with missing bmi -- exclude them
 data %<>% filter(!is.na(bmi))
+n_after_bmi <- nrow(data)
 
 table(data$index_class)
 table(data$index_glp1)
@@ -138,6 +146,14 @@ for (var in cov_clinic) {
   data[[var]] <- as.factor(if_else(is.na(data[[var]]), 0, data[[var]]))
 }
 
+# prop_b_q is an ACS quintile (1-5); the if_else above mapped patients with
+# missing ZIP-level data to 0, which should display as "Missing" in tables
+# and downstream. Relabel the factor level only; positional encoding for
+# modelling is preserved.
+if ("0" %in% levels(data$prop_b_q)) {
+  levels(data$prop_b_q)[levels(data$prop_b_q) == "0"] <- "Missing"
+}
+
 summary(data)
 
 
@@ -168,7 +184,8 @@ data %<>%
 table(data$region)
 
 data %<>%
-  filter(region == "MISSING")
+  filter(region != "MISSING")
+n_after_region <- nrow(data)
 
 cov_demog <- c(
   "gender",
@@ -213,4 +230,53 @@ if (is.finite(SCENARIO$max_baseline_age)) {
 
 saveRDS(cov_list, file.path(output_dir, "cov_list_novel.rds"))
 saveRDS(data, file.path(output_dir, "clean_novel.rds"))
+
+# Append rows to the eligibility flowchart CSV written by step 07
+# to add missing BMI and missing region exclusions
+# and if those rows were previously written, we overwrite them
+flowchart_path <- file.path(project_root, "eligibility_steps_by_cohort.csv")
+if (file.exists(flowchart_path)) {
+  flow <- readr::read_csv(flowchart_path, show_col_types = FALSE)
+
+  r_side_steps <- c(
+    "After exclude missing BMI", "After exclude missing region",
+    "Subgroup novel semaglutide", "Subgroup novel tirzepatide",
+    "Subgroup novel SGLT2", "Subgroup novel DPP4",
+    "Subgroup novel sulfonylureas"
+  )
+  flow <- flow[!flow$step %in% r_side_steps, , drop = FALSE]
+
+  seq_steps <- c("After exclude missing BMI", "After exclude missing region")
+  seq_counts <- c(n_after_bmi, n_after_region)
+  running <- tail(flow$novel, 1)
+  excluded_seq <- integer(length(seq_counts))
+  for (i in seq_along(seq_counts)) {
+    excluded_seq[i] <- running - seq_counts[i]
+    running <- seq_counts[i]
+  }
+
+  subgroup_steps <- c(
+    "Subgroup novel semaglutide", "Subgroup novel tirzepatide",
+    "Subgroup novel SGLT2",       "Subgroup novel DPP4",
+    "Subgroup novel sulfonylureas"
+  )
+  subgroup_counts <- c(
+    sum(data$index_glp1  == "semaglutide", na.rm = TRUE),
+    sum(data$index_glp1  == "tirzepatide", na.rm = TRUE),
+    sum(data$index_class == "SGLT2",       na.rm = TRUE),
+    sum(data$index_class == "DPP4",        na.rm = TRUE),
+    sum(data$index_class == "SULFO",       na.rm = TRUE)
+  )
+
+  new_rows <- tibble(
+    step = c(seq_steps, subgroup_steps),
+    novel = as.integer(c(seq_counts, subgroup_counts)),
+    `Excluded (novel)` = c(excluded_seq, rep(NA_integer_, length(subgroup_steps)))
+  )
+
+  flow <- dplyr::bind_rows(flow, new_rows)
+  readr::write_csv(flow, flowchart_path)
+} else {
+  warning("eligibility_steps_by_cohort.csv not found at ", flowchart_path)
+}
 ```

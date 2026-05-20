@@ -13,7 +13,6 @@ Save KM curves and forest plot for outcome. Update legends, labels, and sizing a
 
 ```{r}
 #| label: km-curves
-library(here)
 library(dplyr)
 library(magrittr)
 library(survival)
@@ -24,19 +23,40 @@ library(gt)
 library(patchwork)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+is_main <- !nzchar(Sys.getenv("SCENARIO_NAME")) ||
+  identical(Sys.getenv("SCENARIO_NAME"), "main")
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
+
+# Manuscript outputs (figures and tables) live alongside the project; created
+# on demand so the script works on a fresh clone.
+manuscript_fig_dir <- file.path(project_root, "manuscript", "figures")
+dir.create(manuscript_fig_dir, recursive = TRUE, showWarnings = FALSE)
 
 outcome <- "dementia_allcause"
 
-end_date <- ymd(Sys.getenv("STUDY_END", unset = "2026-01-01"))
+end_date <- ymd(Sys.getenv("STUDY_END", unset = "2025-12-31"))
 
-data <- readRDS(file.path(output_dir, "data_novel.rds"))
-data1 <- readRDS(file.path(output_dir, "data1_novel.rds"))
-data2 <- readRDS(file.path(output_dir, "data2_novel.rds"))
-data3 <- readRDS(file.path(output_dir, "data3_novel.rds"))
-cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
+# Collected per-cohort ITT KM panels for the stacked manuscript figure 3.
+itt_panels <- list()
+panel_titles <- c(
+  data1 = "(a) Semaglutide/Tirzepatide vs SGLT2 Inhibitors",
+  data2 = "(b) Semaglutide/Tirzepatide vs DPP4 Inhibitors",
+  data3 = "(c) Semaglutide/Tirzepatide vs Sulfonylureas"
+)
+
+data     <- readRDS(out_path("data_novel.rds"))
+data1    <- readRDS(out_path("data1_novel.rds"))
+data2    <- readRDS(out_path("data2_novel.rds"))
+data3    <- readRDS(out_path("data3_novel.rds"))
+cov_list <- readRDS(out_path("cov_list_novel.rds"))
 
 max_fu <- 730
 date_name <- paste0("outcome_", outcome, "_date")
@@ -140,14 +160,27 @@ for (cohort_name in c("data1", "data2", "data3")) {
                   legend.title = "Treatment",
                   legend.labs = c(ref, index),
                   palette = c("#009E73", "#CC79A7"),
-                  ylim = c(0, 0.03)) # adjust scale as needed
+                  ylim = c(0, 0.035)) # adjust scale as needed
 
   print(p)
 
-  pdf(paste0(results_dir, "/km_itt_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+  pdf(file.path(results_dir, paste0("km_itt_", outcome, "_", cohort_name, ".pdf")), width = 10, height = 8, onefile = FALSE)
   print(p)
   dev.off()
   dev.off()
+
+  # Capture the full ggsurvplot object (not just $plot) so the stacked
+  # manuscript figure 3 below can render curve + number-at-risk table via
+  # survminer::arrange_ggsurvplots, the same way each per-cohort PDF is
+  # drawn. We override the title to the panel-letter label, bold the panel
+  # heading, and bump the legend text size for the drug labels.
+  p$plot <- p$plot +
+    labs(title = panel_titles[[cohort_name]], subtitle = NULL) +
+    theme(plot.title   = element_text(face = "bold"),
+          legend.text  = element_text(size = 12),
+          legend.title = element_text(size = 12, face = "bold"))
+  itt_panels[[cohort_name]] <- p
+
   rm(km_fit, p)
   gc()
 
@@ -168,10 +201,10 @@ for (cohort_name in c("data1", "data2", "data3")) {
                   legend.title = "Treatment",
                   legend.labs = c(ref, index),
                   palette = c("#009E73", "#CC79A7"),
-                  ylim = c(0, 0.03)) # adjust scale as needed
+                  ylim = c(0, 0.035)) # adjust scale as needed
 
   print(p)
-  pdf(paste0(results_dir, "/km_pp_", outcome, "_", cohort_name, "_", Sys.Date(), ".pdf"), width = 10, height = 8, onefile = FALSE)
+  pdf(file.path(results_dir, paste0("km_pp_", outcome, "_", cohort_name, ".pdf")), width = 10, height = 8, onefile = FALSE)
   print(p)
   dev.off()
   dev.off()
@@ -181,6 +214,26 @@ for (cohort_name in c("data1", "data2", "data3")) {
 }
 
 rm(cohort, cohort_name, ref, index)
+
+# Manuscript figure 3: IPTW-weighted ITT KM curves, 3 panels (curve + number-
+# at-risk table per panel) stacked vertically. ggsurvplot objects don't compose
+# correctly via patchwork (you'd get a curve-only / table-only mash that
+# renders empty when saved), so we use survminer::arrange_ggsurvplots and
+# write directly to a PDF/TIFF device - same pattern as the per-cohort PDFs
+# saved earlier in the loop. Only saved on the main run; sensitivity scenarios
+# would otherwise overwrite main's manuscript copy.
+if (is_main) {
+  pdf(file.path(manuscript_fig_dir, "figure-3-km-curves.pdf"),
+      width = 8, height = 16, onefile = FALSE)
+  arrange_ggsurvplots(itt_panels, print = TRUE, ncol = 1, nrow = 3)
+  dev.off()
+
+  # High-resolution TIFF for manuscript submission (LZW-compressed, 300 dpi).
+  tiff(file.path(manuscript_fig_dir, "figure-3-km-curves.tiff"),
+       width = 8, height = 16, units = "in", res = 300, compression = "lzw")
+  arrange_ggsurvplots(itt_panels, print = TRUE, ncol = 1, nrow = 3)
+  dev.off()
+}
 ```
 
 
@@ -188,12 +241,10 @@ rm(cohort, cohort_name, ref, index)
 ```{r}
 #| label: forest-plot
 #### FOREST PLOT ####
-# results are dated, so you can define the dates for the results here:
-date <- "2026-05-07"
 
-## load results
-summary_table <- readRDS(paste0(results_dir, "/all_cox_results_novel_", date, ".rds"))
-followup_times <- read.csv(paste0(results_dir, "/followup_times_", date, ".csv"))
+## load results (written by 18-run-survival-analyses.qmd in this same pipeline run)
+summary_table <- readRDS(file.path(results_dir, "all_cox_results_novel.rds"))
+followup_times <- read.csv(file.path(results_dir, "followup_times.csv"))
 
 followup_times %<>%
   mutate(
@@ -274,15 +325,25 @@ p_count_comp <-
   coord_cartesian(xlim = c(0,1))
 
 ## Forest plot lines
-p_line <-
-  forest_data %>%
+# Add a phantom "Comparator" header row (NA values) so this plot's discrete
+# y-axis has the same four levels as the text columns built from res_plot.
+# Without this, p_line has 3 rows and the text columns have 4, so the line
+# and point for each HR don't align with the matching text values.
+p_line_data <- forest_data %>%
   mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2", "b) DPP4", "c) SU"))) %>%
+  bind_rows(data.frame(Comparator = factor("Comparator"),
+                       hr        = NA_real_,
+                       ci_lower  = NA_real_,
+                       ci_upper  = NA_real_))
+
+p_line <-
+  p_line_data %>%
   ggplot(aes(y = Comparator)) +
   theme_classic() +
-  geom_point(aes(x = hr), shape = 15, size = 3) +
-  geom_linerange(aes(xmin = ci_lower, xmax = ci_upper)) +
+  geom_point(aes(x = hr), shape = 15, size = 3, na.rm = TRUE) +
+  geom_linerange(aes(xmin = ci_lower, xmax = ci_upper), na.rm = TRUE) +
   labs(x = "HR") +
-  scale_x_log10(limits = c(0.25, 2)) + 
+  scale_x_log10(limits = c(0.25, 2)) +
   geom_vline(xintercept = 1, linetype = "dashed") +
   annotate("text", x = 0.7, y = 0.5, label = "GLP1 protective") +
   annotate("text", x = 1.4, y = 0.5, label = "GLP1 harmful") +
@@ -318,15 +379,263 @@ layout <- c(
   area(t = 0, l = 0,  b = 30, r = 3),   # p_name
   area(t = 0, l = 3,  b = 30, r = 7),   # p_count_trt
   area(t = 0, l = 7,  b = 30, r = 11),   # p_count_comp
-  area(t = 1, l = 11,  b = 30, r = 26),  # p_line
+  area(t = 0, l = 11,  b = 30, r = 26),  # p_line
   area(t = 0, l = 26, b = 30, r = 30),  # p_hr
   area(t = 0, l = 30, b = 30, r = 32)   # p_pval
 )
 
-# final plot arrangement
-p_name + p_count_trt + p_count_comp + p_line + p_hr + p_pval +
-  plot_layout(design = layout)
+# Pull analytic Ns from followup_times for the figure caption (ITT analysis
+# of dementia_allcause). data1/data2/data3 each carry the GLP-1 cohort as
+# n_trt and the respective comparator as n_comp.
+ns_itt <- followup_times %>%
+  filter(outcome == "dementia_allcause", approach == "itt")
+n_glp1  <- ns_itt$n_trt [ns_itt$cohort == "data1"]
+n_sglt2 <- ns_itt$n_comp[ns_itt$cohort == "data1"]
+n_dpp4  <- ns_itt$n_comp[ns_itt$cohort == "data2"]
+n_sulfo <- ns_itt$n_comp[ns_itt$cohort == "data3"]
+fmt_n <- function(x) format(x, big.mark = ",", scientific = FALSE, trim = TRUE)
 
-## save final figure
-ggsave("combo_forest_plot_novel.pdf", width=16, height=4, dpi=300)
+figure_2_note <- sprintf(
+  paste0("Note: Analytic sample sizes of N=%s for GLP-1 cohort, N=%s for SGLT2 cohort, ",
+         "N=%s for DPP4 cohort, and N=%s for sulfonylureas after excluding patients with ",
+         "an event within 90 days and less than 90 days of follow-up after index date.\n",
+         "Abbreviations: HR=hazard ratio; SU=sulfonylureas."),
+  fmt_n(n_glp1), fmt_n(n_sglt2), fmt_n(n_dpp4), fmt_n(n_sulfo)
+)
+
+# final plot arrangement, with caption
+figure_2 <- p_name + p_count_trt + p_count_comp + p_line + p_hr + p_pval +
+  plot_layout(design = layout) +
+  plot_annotation(
+    caption = figure_2_note,
+    theme = theme(plot.caption = element_text(hjust = 0, size = 9, lineheight = 1.1))
+  )
+figure_2
+
+## save final figure - manuscript figure 2 (dementia forest plot, all 3 comparators)
+## Only saved on the main run.
+if (is_main) {
+  ggsave(
+    file.path(manuscript_fig_dir, "figure-2-forest-plot.pdf"),
+    figure_2,
+    width = 16, height = 5, dpi = 300
+  )
+  # High-resolution TIFF for manuscript submission (LZW-compressed, 300 dpi).
+  ggsave(
+    file.path(manuscript_fig_dir, "figure-2-forest-plot.tiff"),
+    figure_2,
+    width = 16, height = 5, dpi = 300,
+    device = "tiff", compression = "lzw"
+  )
+}
+```
+
+
+# CONSORT-style flowchart (figure 1)
+```{r}
+#| label: figure-1-flowchart
+#| warning: false
+# Build figure-1-flowchart from artefacts produced upstream:
+#   - <output_dir>/merge_counts.txt  (BOX 1 / BOX 2; written by 06)
+#   - <project_root>/eligibility_steps_by_cohort.csv  (study-pop + analytic
+#     exclusions + per-class subgroup counts; written by 07 and updated by 14)
+# Only built on the main run; sensitivity scenarios skip it so they don't
+# overwrite main's manuscript copy.
+if (!is_main) knitr::knit_exit()
+
+fmt_n <- function(x) format(as.integer(x), big.mark = ",", scientific = FALSE, trim = TRUE)
+
+# --- BOX 1 / BOX 2 from merge_counts.txt --------------------------------------
+mc_path <- file.path(output_dir, "merge_counts.txt")
+mc_lines <- if (file.exists(mc_path)) readLines(mc_path, warn = FALSE) else character(0)
+extract_n <- function(prefix) {
+  ln <- grep(prefix, mc_lines, value = TRUE, fixed = TRUE)
+  if (!length(ln)) return(NA_integer_)
+  as.integer(sub(".*N=([0-9]+).*", "\\1", ln[1]))
+}
+n_box1 <- extract_n("BOX 1")
+n_box2 <- extract_n("BOX 2")
+
+# --- exclusion rows + BOX 3 / BOX 4 from eligibility CSV ----------------------
+flow_path <- file.path(project_root, "eligibility_steps_by_cohort.csv")
+flow <- readr::read_csv(flow_path, show_col_types = FALSE)
+flow$step <- as.character(flow$step)
+
+is_after <- grepl("^After exclude", flow$step)
+is_analytic <- flow$step %in% c("After exclude missing BMI",
+                                "After exclude missing region")
+is_subgroup <- grepl("^Subgroup novel", flow$step)
+study_pop <- flow[is_after & !is_analytic, , drop = FALSE]
+analytic  <- flow[is_analytic, , drop = FALSE]
+subgroups <- flow[is_subgroup, , drop = FALSE]
+
+n_box3 <- tail(study_pop$novel, 1)
+n_box4 <- tail(analytic$novel,  1)
+
+# Strip the "After exclude " prefix and convert to sentence case (capitalize
+# the first alphabetic character; leave the rest untouched so acronyms like
+# BMI stay capitalized).
+sentence_case <- function(s) {
+  m <- regexpr("[A-Za-z]", s)
+  ifelse(m == -1L, s,
+         paste0(substr(s, 1L, m - 1L),
+                toupper(substr(s, m, m)),
+                substr(s, m + 1L, nchar(s))))
+}
+pretty_label <- function(s) sentence_case(sub("^After exclude ", "", s))
+
+study_excl_text <- paste0(
+  "Study population exclusions:\n",
+  paste0("  ", pretty_label(study_pop$step), ": N=",
+         fmt_n(study_pop$`Excluded (novel)`),
+         collapse = "\n")
+)
+analytic_excl_text <- paste0(
+  "Analytic exclusions:\n",
+  paste0("  ", pretty_label(analytic$step), ": N=",
+         fmt_n(analytic$`Excluded (novel)`),
+         collapse = "\n")
+)
+
+# --- BOX 5: one box per index_class / per index_glp1 -------------------------
+sub_n <- setNames(subgroups$novel, sub("^Subgroup novel ", "", subgroups$step))
+box5 <- data.frame(
+  label = c("Semaglutide", "Tirzepatide", "SGLT2 Inhibitors",
+            "DPP4 Inhibitors", "Sulfonylureas"),
+  n = c(sub_n["semaglutide"], sub_n["tirzepatide"], sub_n["SGLT2"],
+        sub_n["DPP4"], sub_n["sulfonylureas"]),
+  stringsAsFactors = FALSE
+)
+box5$text <- paste0(box5$label, "\nN=", fmt_n(box5$n))
+
+# --- box 1 / box 2 expanded text ---------------------------------------------
+study_start_lbl <- format(ymd(Sys.getenv("STUDY_START", unset = "2022-05-01")), "%B %Y")
+study_end_lbl   <- format(end_date, "%B %Y")
+coverage_months <- as.integer(Sys.getenv("COVERAGE_MONTHS", unset = "12"))
+wrap <- function(s, w = 42) paste(strwrap(s, width = w), collapse = "\n")
+
+box1_text <- paste0(
+  wrap(sprintf(
+    "New users of study drugs between %s and %s without prior use in 12-month washout.",
+    study_start_lbl, study_end_lbl)),
+  "\nN=", fmt_n(n_box1)
+)
+box2_text <- paste0(
+  sprintf("After requiring continuous coverage for %d months.", coverage_months),
+  "\nN=", fmt_n(n_box2)
+)
+
+# --- layout -------------------------------------------------------------------
+# Canvas 16 wide x 26 tall. Main column at x = 5, side boxes at x = 11.5.
+# Box heights are taller than before to accommodate the larger font size.
+# side_h_* uses a tight per-line factor (~0.42) so the breakdown text fills
+# its box without leaving extra padding at the top/bottom.
+mainx  <- 5
+sidex  <- 11.5
+mainw  <- 5.6
+sidew  <- 6.2
+boxh   <- 2.0    # standard height for the four spine boxes
+box1_h <- 2.6    # box 1 has up to 4 lines of text
+side_h_study    <- 0.42 * (nrow(study_pop) + 1) + 0.4
+side_h_analytic <- 0.42 * (nrow(analytic)  + 1) + 0.4
+
+# Spine y-coords. Vertical gaps between spine boxes are widened so that the
+# (often tall) study- and analytic-exclusion breakdown boxes sit comfortably
+# between them without overlap. Each side breakdown box stays at the exact
+# midpoint between its two adjacent spine boxes so the horizontal connector
+# lands on the spine arrow.
+y_box1 <- 23
+y_box2 <- 19
+y_box3 <- 11
+y_box4 <- 4.5
+y_study_excl    <- (y_box2 + y_box3) / 2
+y_analytic_excl <- (y_box3 + y_box4) / 2
+
+boxes <- data.frame(
+  name  = c("box1",  "box2",  "study_excl",   "box3",  "analytic_excl",     "box4"),
+  x     = c(mainx,   mainx,   sidex,          mainx,   sidex,               mainx),
+  y     = c(y_box1,  y_box2,  y_study_excl,   y_box3,  y_analytic_excl,     y_box4),
+  w     = c(mainw,   mainw,   sidew,          mainw,   sidew,               mainw),
+  h     = c(box1_h,  boxh,    side_h_study,   boxh,    side_h_analytic,     boxh),
+  label = c(
+    box1_text,
+    box2_text,
+    study_excl_text,
+    paste0("After applying study population exclusions\nN=", fmt_n(n_box3)),
+    analytic_excl_text,
+    paste0("After analytic exclusions\nN=", fmt_n(n_box4))
+  ),
+  stringsAsFactors = FALSE
+)
+
+# Bottom row: 5 evenly-spaced boxes
+b5_y <- 1.0
+b5_w <- 2.7
+b5_h <- 1.6
+b5_xs <- seq(1.7, 14.3, length.out = 5)
+boxes <- rbind(boxes, data.frame(
+  name = paste0("box5_", seq_len(5)),
+  x = b5_xs, y = b5_y, w = b5_w, h = b5_h,
+  label = box5$text,
+  stringsAsFactors = FALSE
+))
+
+# Arrows along the main column + side branches from main to breakdown boxes.
+arrow_seg <- function(x1, y1, x2, y2) data.frame(x = x1, xend = x2, y = y1, yend = y2)
+top <- function(i) boxes$y[i] + boxes$h[i] / 2
+bot <- function(i) boxes$y[i] - boxes$h[i] / 2
+lft <- function(i) boxes$x[i] - boxes$w[i] / 2
+rgt <- function(i) boxes$x[i] + boxes$w[i] / 2
+
+ix <- setNames(seq_len(nrow(boxes)), boxes$name)
+
+# Main spine
+spine <- rbind(
+  arrow_seg(boxes$x[ix["box1"]],          bot(ix["box1"]),
+            boxes$x[ix["box2"]],          top(ix["box2"])),
+  arrow_seg(boxes$x[ix["box2"]],          bot(ix["box2"]),
+            boxes$x[ix["box3"]],          top(ix["box3"])),
+  arrow_seg(boxes$x[ix["box3"]],          bot(ix["box3"]),
+            boxes$x[ix["box4"]],          top(ix["box4"]))
+)
+# Side branches: horizontal lines that start ON the spine (x = mainx) at the
+# y of the breakdown box, and travel to the left edge of that breakdown box.
+# Because the breakdown boxes sit at the exact midpoint between the adjacent
+# spine boxes, the connector visually intersects the main arrow line.
+side <- rbind(
+  arrow_seg(mainx, boxes$y[ix["study_excl"]],
+            lft(ix["study_excl"]),    boxes$y[ix["study_excl"]]),
+  arrow_seg(mainx, boxes$y[ix["analytic_excl"]],
+            lft(ix["analytic_excl"]), boxes$y[ix["analytic_excl"]])
+)
+# Branches into the 5 final boxes
+b4_bot <- bot(ix["box4"])
+fan <- do.call(rbind, lapply(grep("^box5_", boxes$name), function(j) {
+  arrow_seg(boxes$x[ix["box4"]], b4_bot, boxes$x[j], top(j))
+}))
+
+flowchart_plot <- ggplot() +
+  geom_rect(data = boxes,
+            aes(xmin = x - w/2, xmax = x + w/2,
+                ymin = y - h/2, ymax = y + h/2),
+            fill = "white", color = "black", linewidth = 0.4) +
+  geom_text(data = boxes, aes(x = x, y = y, label = label),
+            size = 4, lineheight = 1.15) +
+  geom_segment(data = spine, aes(x = x, xend = xend, y = y, yend = yend),
+               arrow = arrow(length = unit(0.22, "cm"), type = "closed"),
+               linewidth = 0.5) +
+  geom_segment(data = side, aes(x = x, xend = xend, y = y, yend = yend),
+               arrow = arrow(length = unit(0.18, "cm"), type = "closed"),
+               linewidth = 0.5) +
+  geom_segment(data = fan, aes(x = x, xend = xend, y = y, yend = yend),
+               arrow = arrow(length = unit(0.18, "cm"), type = "closed"),
+               linewidth = 0.5) +
+  coord_cartesian(xlim = c(0, 16), ylim = c(0, 26), expand = FALSE) +
+  theme_void()
+
+ggsave(file.path(manuscript_fig_dir, "figure-1-flowchart.pdf"),
+       flowchart_plot, width = 13, height = 14, dpi = 300)
+ggsave(file.path(manuscript_fig_dir, "figure-1-flowchart.tiff"),
+       flowchart_plot, width = 13, height = 14, dpi = 300,
+       device = "tiff", compression = "lzw")
 ```

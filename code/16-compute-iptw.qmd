@@ -16,7 +16,7 @@ Save results in /../results
 
 Weights are truncated at the 2.5th and 97.5th percentiles. Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal".
 
-**Sensitivity-controlled options** (set by `SCENARIO` — see `sensitivity.R`):
+**Sensitivity-controlled options** (set by `SCENARIO` - see `sensitivity.R`):
 - `weight_trimming` + `trimming_pct`: when TRUE, drop patients with propensity scores outside the asymmetric quantile bounds (comparator upper `1 - trimming_pct`, treated lower `trimming_pct`) before computing IPTW.
 
 Entropy balancing weights are computed at the end and saved as `ebal` (the `weight_method = "ebal"` scenario uses them in the survival analyses).
@@ -33,15 +33,21 @@ library(haven)
 library(tidyr)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
-if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. Launch the pipeline via run_all.R, source config.R in your R session, or set it in .Renviron.")
-output_dir  <- file.path(project_root, "output")
-results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
+if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
+main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
+results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
+out_path <- function(name) {
+  p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
+  if (file.exists(p)) return(p)
+  normalizePath(file.path(main_output_dir, name), winslash = "/", mustWork = FALSE)
+}
 
 source(file.path(project_root, "sensitivity.R"))
 SCENARIO <- get_scenario()
 
-data <- readRDS(file.path(output_dir, "ipcw_novel.rds"))
-cov_list <- readRDS(file.path(output_dir, "cov_list_novel.rds"))
+data     <- readRDS(out_path("ipcw_novel.rds"))
+cov_list <- readRDS(out_path("cov_list_novel.rds"))
 
 data %<>%
     mutate(
@@ -548,9 +554,16 @@ bal1 <- bal_tab1$Balance %>%
 bal1$Variable <- row.names(bal1)
 write.table(bal1, file.path(results_dir, "ebal1.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
-# data 2: 
+# data 2:
+# `year` is excluded from the entropy-balancing PS formula for cohort 2
+# because including all year levels prevents WeightIt::weightit() from
+# converging. After the ebal fit, we add NA rows for each year level back
+# into bal2 so the output matches the IPTW table layout, plus a footnote.
+ebal_cov_list_2  <- cov_list[cov_list != "year"]
+ps_formula_2ebal <- as.formula(paste("trt ~", paste(ebal_cov_list_2, collapse = " + ")))
+
 ebal_weights_out2 <- WeightIt::weightit(
-  formula = ps_formula,
+  formula = ps_formula_2ebal,
   data = data2,
   method = "ebal"
 )
@@ -559,7 +572,7 @@ summary(ebal_weights_out2$weights)
 
 data2$ebal <- ebal_weights_out2$weights
 
-bal_tab2 <- bal.tab(ps_formula,
+bal_tab2 <- bal.tab(ps_formula_2ebal,
                     data = data2,
                     weights = 'ebal',
                     binary = 'std',
@@ -575,12 +588,34 @@ bal2 <- bal_tab2$Balance %>%
                 'SMD (IPTW)' = Diff.Adj,
                 'Balance' = M.Threshold)
 
-bal2$Variable <- row.names(bal1)
+bal2$Variable <- row.names(bal2)
+
+# Add an NA row for each year level (marked with footnote `a`), preserving
+# the shape of the IPTW bal2 above, then append the footnote text.
+year_levels <- levels(droplevels(as.factor(data2$year)))
+year_rows   <- bal2[0, , drop = FALSE]
+year_rows[seq_along(year_levels), ] <- NA
+year_rows$Variable <- paste0("year_", year_levels, " a")
+bal2 <- rbind(bal2, year_rows)
+
+fn_row <- bal2[0, , drop = FALSE]
+fn_row[1, ] <- NA
+fn_row$Variable <- paste0("a. Year was excluded from the entropy-balancing PS ",
+                          "formula for this cohort to allow WeightIt::weightit() ",
+                          "to converge; SMDs above are shown as NA.")
+bal2 <- rbind(bal2, fn_row)
+
 write.table(bal2, file.path(results_dir, "ebal2.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
-# data 3: 
+# data 3:
+# `year` is excluded from the entropy-balancing PS formula for cohort 3 for
+# the same reason as cohort 2 (convergence). Year-level rows are added back
+# with NA SMDs plus a footnote so the output matches the IPTW table layout.
+ebal_cov_list_3  <- cov_list[cov_list != "year"]
+ps_formula_3ebal <- as.formula(paste("trt ~", paste(ebal_cov_list_3, collapse = " + ")))
+
 ebal_weights_out3 <- WeightIt::weightit(
-  formula = ps_formula,
+  formula = ps_formula_3ebal,
   data = data3,
   method = "ebal"
 )
@@ -589,7 +624,7 @@ summary(ebal_weights_out3$weights)
 
 data3$ebal <- ebal_weights_out3$weights
 
-bal_tab3 <- bal.tab(ps_formula,
+bal_tab3 <- bal.tab(ps_formula_3ebal,
                     data = data3,
                     weights = 'ebal',
                     binary = 'std',
@@ -606,6 +641,20 @@ bal3 <- bal_tab3$Balance %>%
                 'Balance' = M.Threshold)
 
 bal3$Variable <- row.names(bal3)
+
+year_levels <- levels(droplevels(as.factor(data3$year)))
+year_rows   <- bal3[0, , drop = FALSE]
+year_rows[seq_along(year_levels), ] <- NA
+year_rows$Variable <- paste0("year_", year_levels, " a")
+bal3 <- rbind(bal3, year_rows)
+
+fn_row <- bal3[0, , drop = FALSE]
+fn_row[1, ] <- NA
+fn_row$Variable <- paste0("a. Year was excluded from the entropy-balancing PS ",
+                          "formula for this cohort to allow WeightIt::weightit() ",
+                          "to converge; SMDs above are shown as NA.")
+bal3 <- rbind(bal3, fn_row)
+
 write.table(bal3, file.path(results_dir, "ebal3.csv"), col.names = T, row.names = T, append = F, sep = ',')
 ```
 
