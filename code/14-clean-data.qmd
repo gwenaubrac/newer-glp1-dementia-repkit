@@ -234,7 +234,7 @@ saveRDS(data, file.path(output_dir, "clean_novel.rds"))
 # Append rows to the eligibility flowchart CSV written by step 07
 # to add missing BMI and missing region exclusions
 # and if those rows were previously written, we overwrite them
-flowchart_path <- file.path(project_root, "eligibility_steps_by_cohort.csv")
+flowchart_path <- file.path(results_dir, "eligibility_steps_by_cohort.csv")
 if (file.exists(flowchart_path)) {
   flow <- readr::read_csv(flowchart_path, show_col_types = FALSE)
 

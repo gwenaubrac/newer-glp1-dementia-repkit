@@ -83,4 +83,5 @@ for (c in cohorts) {
 
 res_with_excluded
 
-readr::write_csv(res_with_excluded, "eligibility_steps_by_cohort.csv")
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+readr::write_csv(res_with_excluded, file.path(results_dir, "eligibility_steps_by_cohort.csv"))

@@ -437,7 +437,7 @@ if (is_main) {
 #| warning: false
 # Build figure-1-flowchart from artefacts produced upstream:
 #   - <output_dir>/merge_counts.txt  (BOX 1 / BOX 2; written by 06)
-#   - <project_root>/eligibility_steps_by_cohort.csv  (study-pop + analytic
+#   - <results_dir>/eligibility_steps_by_cohort.csv  (study-pop + analytic
 #     exclusions + per-class subgroup counts; written by 07 and updated by 14)
 # Only built on the main run; sensitivity scenarios skip it so they don't
 # overwrite main's manuscript copy.
@@ -457,7 +457,7 @@ n_box1 <- extract_n("BOX 1")
 n_box2 <- extract_n("BOX 2")
 
 # --- exclusion rows + BOX 3 / BOX 4 from eligibility CSV ----------------------
-flow_path <- file.path(project_root, "eligibility_steps_by_cohort.csv")
+flow_path <- file.path(results_dir, "eligibility_steps_by_cohort.csv")
 flow <- readr::read_csv(flow_path, show_col_types = FALSE)
 flow$step <- as.character(flow$step)
 

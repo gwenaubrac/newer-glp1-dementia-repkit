@@ -438,5 +438,9 @@ erase lookback_diabetes_novel.dta
 erase lookback_glp_novel.dta
 erase lookback_dementia_novel.dta
 erase ndc_other_glp.dta
-erase index_novel_comparisons.dta
-erase cov_lookback_novel.dta
+* index_novel_comparisons.dta and cov_lookback_novel.dta are upstream inputs
+* for sens6_6mo_coverage (start_step 5), so keep them on disk for sensitivity
+* runs to read via $MAIN_OUTPUT_DIR. Re-enable the erase lines below only if
+* you're sure no scenario will re-run steps 5-6.
+* erase index_novel_comparisons.dta
+* erase cov_lookback_novel.dta
