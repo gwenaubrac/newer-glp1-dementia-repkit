@@ -85,7 +85,7 @@ Per-scenario results land in `results/<scenario_name>/` (main's live in `results
 | `sens8_6mo_followup` | Require 6 months of follow-up after index, excluding early events | `14-clean-data` |
 | `sens9_age_cap` | Exclude patients aged >85 at baseline | `14-clean-data` |
 
-To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The four analysis scripts that read scenario parameters are `05`, `14`, `16`, and `18`.
+To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The analysis scripts that read scenario parameters are `05`, `14`, `16`, `17`, `18`, and `19`.
 
 ## Study design
 
@@ -94,51 +94,6 @@ To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivit
 - **Population**: adults aged ≥60 with type 2 diabetes and BMI ≥25
 - **Comparisons**: GLP-1 agonists (tirzepatide + semaglutide) vs. SGLT-2 inhibitors, DPP-4 inhibitors, and sulfonylureas
 - **Outcomes**: primary - incident all-cause dementia; negative controls - appendicitis, basal cell carcinoma, traumatic tooth fracture, Bell's palsy
-
-## Repository structure
-
-```
-.
-├-- README.md
-├-- AGENTS.md
-├-- config.R                # binaries + study window (most users edit nothing)
-├-- sensitivity.R           # sensitivity scenario definitions
-├-- run_all.R               # main pipeline runner
-├-- run_sensitivity.R       # sensitivity-scenario driver
-├-- run_all.command         # macOS double-click wrapper
-├-- run_all.bat             # Windows double-click wrapper
-├-- .Renviron               # created by 00-setup.R; git-ignored
-├-- docs/                   # supplementary documentation
-├-- manuscript/             # pipeline-generated + author-added artefacts
-|   ├-- figures/            # auto: figure-1-flowchart, figure-2-forest-plot, figure-3-km-curves (PDF + TIFF)
-|   +-- tables/             # auto: table-1-patient-char.csv, table-2-results.csv, e-table-4-nco.csv
-|                           # Other files in this folder were added by the authors.
-+-- code/
-    ├-- 00-setup.R          # run-once R environment + .Renviron setup
-    ├-- 01-extract-drug-codes.qmd
-    ├-- 02-extract-dispensings.qmd
-    ├-- 03-identify-new-users.qmd
-    ├-- 04-extract-censoring-dates.do
-    ├-- 05-extract-coverage-indicator.do
-    ├-- 06-apply-eligibility-criteria.do
-    ├-- 07-create-eligibility-flowchart.R
-    ├-- 08-extract-demographic-covs.do
-    ├-- 09-extract-comorbidity-covs.do
-    ├-- 10-extract-medication-covs.do
-    ├-- 11-extract-provider-zip-cov.do
-    ├-- 12-merge-covariates.do
-    ├-- 13-extract-outcome-occurrences.do
-    ├-- 14-clean-data.qmd
-    ├-- 15a-compute-ipcw.qmd
-    ├-- 15b-describe-ipcw.R
-    ├-- 16-compute-iptw.qmd
-    ├-- 17-describe-study-sample.qmd
-    ├-- 18-run-survival-analyses.qmd
-    ├-- 19-create-plots.qmd
-    ├-- renv/               # renv project library
-    ├-- renv.lock           # pinned R package versions
-    +-- acs_zip_edu_inc.csv # ACS ZIP-level education/income data
-```
 
 ## Contact
 
