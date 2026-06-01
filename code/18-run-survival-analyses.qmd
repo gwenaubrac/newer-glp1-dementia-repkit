@@ -579,10 +579,30 @@ if (is_main) {
   rows[[length(rows) + 1]] <- c("  IPTW",  fmt_hr(summary_table, "itt"))
   rows[[length(rows) + 1]] <- c("Sensitivity analyses", "", "", "")
 
+  # Order of sensitivity rows in manuscript Table 2. 
+  sens_order <- c(
+    "sens1_ebal",
+    "sens2_trim",
+    "pp_iptw_only",
+    "sens4_pp_ipcw",
+    "sens5_metformin",
+    "sens6_6mo_coverage",
+    "sens7_index_followup",
+    "sens8_6mo_followup",
+    "sens9_age_cap"
+  )
+  sens_order <- c(sens_order,
+                  setdiff(names(SENSITIVITY_SCENARIOS), sens_order))
+
   # Sensitivity scenarios save their rds to results/<scenario>/, i.e. a
   # sibling of main's results dir (results/main/).
   scenarios_root <- dirname(results_dir)
-  for (nm in names(SENSITIVITY_SCENARIOS)) {
+  for (nm in sens_order) {
+    if (identical(nm, "pp_iptw_only")) {
+      rows[[length(rows) + 1]] <- c("  Per-protocol with IPTW only",
+                                    fmt_hr(summary_table, "pp"))
+      next
+    }
     sens_rds <- file.path(scenarios_root, nm, "all_cox_results_novel.rds")
     if (!file.exists(sens_rds)) next
     sens_st <- readRDS(sens_rds)

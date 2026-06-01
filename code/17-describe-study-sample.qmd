@@ -91,7 +91,7 @@ labels <- c(
   metformin = "Metformin",
   prop_b_q = "ZIP5-level quintile of proportion with a Bachelor's or higher",
   gender = "Male",
-  year = "Initation year",
+  year = "Initiation year",
   bmi_cat = "BMI category",
   region = "Region",
   race = "Race and ethnicity",
@@ -369,7 +369,8 @@ if (is_main) {
 manuscript_tab_dir <- file.path(project_root, "manuscript", "tables")
 dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
 
-manuscript_tab1 <- final_tab1[, c("var", "sglt2", "smd_sglt2",
+manuscript_tab1 <- final_tab1[, c("var", "glp1",
+                                  "sglt2", "smd_sglt2",
                                   "dpp4", "smd_dpp4",
                                   "sulfo", "smd_sulfo")]
 
@@ -411,6 +412,7 @@ manuscript_tab1$var[age_rows] <- sub("(Age \\(years\\))", "\\1 b",
 
 # Footnote marker on each "IPTW SMD" header (footnote a).
 colnames(manuscript_tab1) <- c("Variable",
+                                "Novel GLP1 Agonists",
                                 "SGLT2 Inhibitors", "IPTW SMD a",
                                 "DPP4 Inhibitors",  "IPTW SMD a",
                                 "Sulfonylureas",    "IPTW SMD a")
