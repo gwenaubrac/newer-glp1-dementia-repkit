@@ -354,7 +354,7 @@ file write log "After exclude missing age: `n_after' patients" _n
 drop if dod < index_date
 count
 local n_after = r(N)
-file write log "After exclude dod<index: `n_after' patients" _n
+file write log "After exclude date of death<index date: `n_after' patients" _n
 
 
 drop if gender=="U"

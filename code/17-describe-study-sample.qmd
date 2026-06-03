@@ -30,6 +30,7 @@ library(dplyr)
 library(magrittr)
 library(table1)
 library(smd)
+library(openxlsx)
 
 data     <- readRDS(out_path("data_novel.rds"))
 data1    <- readRDS(out_path("data1_novel.rds"))
@@ -41,10 +42,19 @@ data1$trt <- factor(data1$trt, levels = c(0, 1), labels = c("SGLT2 Inhibitors", 
 data2$trt <- factor(data2$trt, levels = c(0, 1), labels = c("DPP4 Inhibitors", "Novel GLP1 Agonists"))
 data3$trt <- factor(data3$trt, levels = c(0, 1), labels = c("Sulfonylureas", "Novel GLP1 Agonists"))
 
+# Recode sex as Male/Female so the table shows both rows
+for (dn in c("data", "data1", "data2", "data3")) {
+  d <- get(dn)
+  g <- toupper(substr(as.character(d$gender), 1, 1))  # "M"/"Male" -> M, "F"/"Female" -> F
+  d$gender <- factor(g, levels = c("M", "F"), labels = c("Male", "Female"))
+  assign(dn, d)
+}
+
 # this function is to only show the rows for cov=1 (to simplify the table)
 render_binary <- function(x, ...) {
   y <- table1::render.categorical.default(x, ...)
-  if (length(levels(factor(x))) == 2) {
+  lv <- levels(factor(x))
+  if (length(lv) == 2 && all(lv %in% c("0", "1"))) {
     y <- tail(y, 1)
     names(y) <- ""
   }
@@ -90,7 +100,7 @@ labels <- c(
   insulin = "Insulin",
   metformin = "Metformin",
   prop_b_q = "ZIP5-level quintile of proportion with a Bachelor's or higher",
-  gender = "Male",
+  gender = "Sex",
   year = "Initiation year",
   bmi_cat = "BMI category",
   region = "Region",
@@ -159,7 +169,7 @@ cov_list <- c(
 )
 
 
-# make table 1 for entire sample (all med groups)
+# make table 1 for entire sample
 tab1_formula <- as.formula(paste("~", paste(cov_list, collapse = " + "), " | index_class"))
 
 tab1_data <- table1(
@@ -373,21 +383,53 @@ manuscript_tab1 <- final_tab1[, c("var", "glp1",
                                   "sglt2", "smd_sglt2",
                                   "dpp4", "smd_dpp4",
                                   "sulfo", "smd_sulfo")]
+smd_cols <- c("smd_sglt2", "smd_dpp4", "smd_sulfo")  # IPTW SMD value columns
+val_cols <- c("glp1", "sglt2", "dpp4", "sulfo")      # N (%) / mean (SD) cells
 
-# Title-case race/region category labels (source data has them in ALL CAPS).
-title_targets <- c("WHITE","BLACK","ASIAN","HISPANIC","OTHER","MISSING",
-                   "MIDWEST","NORTHEAST","SOUTH","WEST")
+# Formatting to table1: indentation under category levels
+.raw   <- manuscript_tab1$var
+.trim  <- trimws(.raw)
+.indented <- grepl("^[[:space:]]", .raw)
+row_type <- ifelse(.trim == "", "info",
+             ifelse(.indented, "sub", "var"))
+
+# Capitalize the first letter of ALL-CAPS subcategory labels (e.g. race/ethnicity,
+# region, insurance plan type). 
 title_case <- function(s) paste0(toupper(substr(s,1,1)), tolower(substr(s,2,nchar(s))))
-.var <- manuscript_tab1$var
-.trim <- trimws(.var)
-for (i in which(.trim %in% title_targets)) {
-  lead <- sub("^([[:space:]]*).*$", "\\1", .var[i])
-  .var[i] <- paste0(lead, title_case(.trim[i]))
+caps_sub <- .indented & grepl("^[A-Z ]+$", .trim) & grepl("[A-Z]", .trim)
+for (i in which(caps_sub)) {
+  lead <- sub("^([[:space:]]*).*$", "\\1", manuscript_tab1$var[i])
+  manuscript_tab1$var[i] <- paste0(lead, title_case(.trim[i]))
 }
-manuscript_tab1$var <- .var
 
-# Add thousands separators to integers with 4+ digits inside cells. Handles
-# patterns like "12345" and "12345 (45%)" without touching decimals.
+# Add header rows for groups of variables
+section_first <- c(
+  "Sociodemographic characteristics" = labels[["age"]],
+  "Comorbidities"                     = labels[["alcohol"]],
+  "Medication use"                    = labels[["aceinhibitor"]]
+)
+blank_row <- manuscript_tab1[1, , drop = FALSE]
+blank_row[1, ] <- ""
+out <- vector("list", 0L); out_type <- character(0)
+for (i in seq_len(nrow(manuscript_tab1))) {
+  hit <- match(.trim[i], section_first)
+  if (!is.na(hit)) {
+    hrow <- blank_row; hrow$var <- names(section_first)[hit]
+    out <- c(out, list(hrow)); out_type <- c(out_type, "section")
+  }
+  out <- c(out, list(manuscript_tab1[i, , drop = FALSE]))
+  out_type <- c(out_type, row_type[i])
+}
+manuscript_tab1 <- do.call(rbind, out)
+row_type <- out_type
+
+# SMDs round to 3 decimals, and "0" means  true value is <0.001
+for (cc in smd_cols) {
+  z <- manuscript_tab1[[cc]] == "0"
+  manuscript_tab1[[cc]][z] <- "<0.001"
+}
+
+# Add thousands separators to integers with 4+ digits inside N (%) 
 add_commas <- function(x) {
   vapply(x, function(s) {
     if (is.na(s)) return(s)
@@ -403,24 +445,21 @@ add_commas <- function(x) {
     s
   }, character(1), USE.NAMES = FALSE)
 }
-manuscript_tab1[] <- lapply(manuscript_tab1, add_commas)
+manuscript_tab1[val_cols] <- lapply(manuscript_tab1[val_cols], add_commas)
 
-# Footnote marker on "Age (years)" row (footnote b).
+# Footnote for "Age (years)" row (footnote b).
 age_rows <- grepl("^[[:space:]]*Age \\(years\\)\\s*$", manuscript_tab1$var)
 manuscript_tab1$var[age_rows] <- sub("(Age \\(years\\))", "\\1 b",
                                      manuscript_tab1$var[age_rows])
 
-# Footnote marker on each "IPTW SMD" header (footnote a).
+# Footnote for "IPTW SMD" header (footnote a).
 colnames(manuscript_tab1) <- c("Variable",
-                                "Novel GLP1 Agonists",
+                                "GLP-1 Agonists",
                                 "SGLT2 Inhibitors", "IPTW SMD a",
                                 "DPP4 Inhibitors",  "IPTW SMD a",
                                 "Sulfonylureas",    "IPTW SMD a")
 
 # Append footnote rows at the bottom of the table.
-# Build footnotes positionally so the duplicate "IPTW SMD a" column names
-# don't get collapsed by setdiff() (which would leave the data frame with
-# fewer columns than manuscript_tab1 and break rbind).
 footnotes <- as.data.frame(
   matrix("", nrow = 2, ncol = ncol(manuscript_tab1)),
   stringsAsFactors = FALSE
@@ -431,9 +470,56 @@ footnotes[, 1] <- c(
   "b. For privacy reasons, age is top-coded at 89 years. Patients aged 89 and above are represented as age 89."
 )
 manuscript_tab1 <- rbind(manuscript_tab1, footnotes)
+row_type <- c(row_type, "footnote", "footnote")
 
-write.table(manuscript_tab1,
-            file.path(manuscript_tab_dir, "table-1-patient-char.csv"),
-            sep = ",", row.names = FALSE, col.names = TRUE, qmethod = "double")
-}  # /is_main
+#### STYLED XLSX ####
+# Times New Roman 12pt; section headers and variable names bold + indented;
+# subcategories/values plain and further indented; SMDs > 0.1 bold.
+xlsx_tab <- manuscript_tab1
+xlsx_tab$Variable <- trimws(xlsx_tab$Variable)
+
+indent_for <- c(info = 0, section = 0, var = 1, sub = 2, footnote = 0)
+smd_idx    <- which(colnames(xlsx_tab) == "IPTW SMD a")
+nr <- nrow(xlsx_tab); nc <- ncol(xlsx_tab)
+
+wb <- createWorkbook()
+addWorksheet(wb, "Table 1")
+writeData(wb, "Table 1", xlsx_tab, colNames = TRUE)
+
+font <- list(fontName = "Times New Roman", fontSize = 12)
+base_style <- do.call(createStyle, c(font, list(valign = "center")))
+addStyle(wb, 1, base_style, rows = 1:(nr + 1), cols = 1:nc, gridExpand = TRUE)
+
+# Bold header row
+addStyle(wb, 1, do.call(createStyle, c(font, list(textDecoration = "bold"))),
+         rows = 1, cols = 1:nc, gridExpand = TRUE)
+
+# Bold only section headers and "parent" variables
+val_idx <- which(colnames(xlsx_tab) %in% c("GLP-1 Agonists", "SGLT2 Inhibitors",
+                                           "DPP4 Inhibitors", "Sulfonylureas"))
+for (i in seq_len(nr)) {
+  is_parent <- all(xlsx_tab[i, val_idx] == "" | is.na(xlsx_tab[i, val_idx]))
+  bold <- row_type[i] %in% c("section", "var") && is_parent
+  st <- do.call(createStyle, c(font, list(
+    halign = "left",
+    indent = indent_for[[row_type[i]]],
+    textDecoration = if (bold) "bold" else NULL
+  )))
+  addStyle(wb, 1, st, rows = i + 1, cols = 1, gridExpand = TRUE)
+}
+
+# Bold SMD cells whose value exceeds 0.1
+smd_bold <- do.call(createStyle, c(font, list(textDecoration = "bold")))
+for (cc in smd_idx) {
+  v <- suppressWarnings(as.numeric(xlsx_tab[[cc]]))
+  hot <- which(!is.na(v) & v > 0.1)
+  for (i in hot) addStyle(wb, 1, smd_bold, rows = i + 1, cols = cc, gridExpand = TRUE)
+}
+
+setColWidths(wb, 1, cols = 1, widths = 42)
+setColWidths(wb, 1, cols = 2:nc, widths = 18)
+
+saveWorkbook(wb, file.path(manuscript_tab_dir, "table-1-patient-char.xlsx"),
+             overwrite = TRUE)
+}
 ```

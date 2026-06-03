@@ -69,6 +69,7 @@ library(survival)
 library(survminer)
 library(tidyr)
 library(broom)
+library(openxlsx)
 
 end_date <- ymd(Sys.getenv("STUDY_END", unset = "2025-12-31"))
 
@@ -528,6 +529,42 @@ if (!is_main) knitr::knit_exit()
 manuscript_tab_dir <- file.path(project_root, "manuscript", "tables")
 dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
 
+write_manuscript_xlsx <- function(df, path, sheet = "Sheet1", label_col = 1) {
+  val_cols <- setdiff(seq_len(ncol(df)), label_col)
+  lab <- as.character(df[[label_col]]); lab[is.na(lab)] <- ""
+  indented <- grepl("^[[:space:]]", lab)
+  trimmed  <- trimws(lab)
+  vals_empty <- vapply(seq_len(nrow(df)), function(i)
+    all(is.na(df[i, val_cols]) | trimws(as.character(df[i, val_cols])) == ""),
+    logical(1))
+  is_section <- !indented & nzchar(trimmed) & vals_empty
+
+  out <- df
+  out[[label_col]] <- trimmed
+
+  wb <- createWorkbook()
+  addWorksheet(wb, sheet)
+  writeData(wb, sheet, out, colNames = TRUE)
+  nr <- nrow(out); nc <- ncol(out)
+
+  font <- list(fontName = "Times New Roman", fontSize = 12)
+  addStyle(wb, sheet, do.call(createStyle, c(font, list(valign = "center", wrapText = TRUE))),
+           rows = 1:(nr + 1), cols = 1:nc, gridExpand = TRUE)
+  addStyle(wb, sheet, do.call(createStyle, c(font, list(textDecoration = "bold", wrapText = TRUE))),
+           rows = 1, cols = 1:nc, gridExpand = TRUE)
+  for (i in seq_len(nr)) {
+    st <- do.call(createStyle, c(font, list(
+      halign = "left",
+      indent = if (indented[i]) 1 else 0,
+      textDecoration = if (is_section[i]) "bold" else NULL
+    )))
+    addStyle(wb, sheet, st, rows = i + 1, cols = label_col, gridExpand = TRUE)
+  }
+  setColWidths(wb, sheet, cols = label_col, widths = 34)
+  setColWidths(wb, sheet, cols = val_cols, widths = 22)
+  saveWorkbook(wb, path, overwrite = TRUE)
+}
+
 cohort_cols <- c(
   data1 = "HR (95% CI)\nGLP1s vs SGLT2s",
   data2 = "HR (95% CI)\nGLP1s vs DPP4s",
@@ -555,9 +592,9 @@ e_tab4 <- do.call(rbind, lapply(names(nco_labels), function(out) {
 }))
 e_tab4 <- as.data.frame(e_tab4, stringsAsFactors = FALSE)
 colnames(e_tab4) <- c("Negative Control Outcome", unname(cohort_cols))
-write.table(e_tab4,
-            file.path(manuscript_tab_dir, "e-table-4-nco.csv"),
-            sep = ",", row.names = FALSE, col.names = TRUE, qmethod = "double")
+write_manuscript_xlsx(e_tab4,
+                      file.path(manuscript_tab_dir, "e-table-4-nco.xlsx"),
+                      sheet = "e-Table 4")
 ```
 
 ```{r}
@@ -565,8 +602,7 @@ write.table(e_tab4,
 #| warning: false
 
 # Table 2 aggregates the main analysis with every sensitivity scenario run
-# so far. We only build it on the main run; sensitivity invocations write to
-# their own RESULTS_DIR/<scenario>/ subfolder, which this scanner reads from.
+# so far and is only built when running main analysis
 scenario_name <- Sys.getenv("SCENARIO_NAME", unset = "main")
 is_main <- !nzchar(scenario_name) || identical(scenario_name, "main")
 
@@ -594,8 +630,7 @@ if (is_main) {
   sens_order <- c(sens_order,
                   setdiff(names(SENSITIVITY_SCENARIOS), sens_order))
 
-  # Sensitivity scenarios save their rds to results/<scenario>/, i.e. a
-  # sibling of main's results dir (results/main/).
+  # Sensitivity scenarios save their rds to results/<scenario>/
   scenarios_root <- dirname(results_dir)
   for (nm in sens_order) {
     if (identical(nm, "pp_iptw_only")) {
@@ -615,9 +650,9 @@ if (is_main) {
 
   tab2 <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
   colnames(tab2) <- c("Analysis", unname(cohort_cols))
-  write.table(tab2,
-              file.path(manuscript_tab_dir, "table-2-results.csv"),
-              sep = ",", row.names = FALSE, col.names = TRUE, qmethod = "double")
+  write_manuscript_xlsx(tab2,
+                        file.path(manuscript_tab_dir, "table-2-results.xlsx"),
+                        sheet = "Table 2")
 } else {
   message("Skipping table-2-results: SCENARIO_NAME='", scenario_name,
           "' - table 2 is only assembled on the main run.")
