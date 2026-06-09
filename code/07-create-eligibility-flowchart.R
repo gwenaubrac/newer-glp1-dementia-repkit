@@ -17,6 +17,15 @@ out_path <- function(name) {
 log_path <- out_path("eligibility_log.txt")
 lines <- readr::read_lines(log_path)
 
+# Each step 06 run writes one "Start:" line followed by its "After exclude"
+# lines. If the log was appended across multiple runs (e.g. step 06 re-run on
+# top of a previous log), keep only the most recent run - from the last
+# "Start:" line onward - so step names aren't duplicated downstream.
+start_idxs <- which(str_detect(lines, regex("^Start:", ignore_case = TRUE)))
+if (length(start_idxs) > 0) {
+  lines <- lines[tail(start_idxs, 1):length(lines)]
+}
+
 # keep lines of interest from the eligibility log text file
 step_idx <- str_detect(lines, regex(
   "^(Start:|After exclude)",

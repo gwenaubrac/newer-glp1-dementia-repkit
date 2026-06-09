@@ -331,7 +331,7 @@ save lookback_glp_novel, replace
 clear
 use continuous_novel, clear
 merge 1:1 PATIENT_ID using dod_novel, keep (1 3) nogen
-merge 1:1 PATIENT_ID using lookback_bmi_novel, keep(match)
+merge 1:1 PATIENT_ID using lookback_bmi_novel, keep(1 3)
 merge 1:1 PATIENT_ID using age_novel, keep (1 3) nogen
 merge 1:1 PATIENT_ID using contra_novel, keep (1 3) nogen
 merge 1:1 PATIENT_ID using cov_end_novel, keep (1 3) nogen
@@ -363,10 +363,18 @@ local n_after = r(N)
 file write log "After exclude gender U: `n_after' patients" _n
 
 
+* Patients with no Z68 code in the lookback (merge _merge==1 above) have no
+* recorded BMI and cannot meet the BMI>=25 indication, so they are excluded.
+drop if _merge==1
+count
+local n_after = r(N)
+file write log "After exclude no BMI/Z68 code in lookback: `n_after' patients" _n
+
+
 drop if bmi<25
 count
 local n_after = r(N)
-file write log "After exclude BMI<25: `n_after' patients" _n
+file write log "After exclude BMI<25 kg/m2: `n_after' patients" _n
 
 
 drop if lookback_diabetesT1==1
@@ -396,7 +404,7 @@ file write log "After exclude gastroparesis: `n_after' patients" _n
 drop if cov_end < index_date + 90
 count
 local n_after = r(N)
-file write log "After exclude <90 days of coverage: `n_after' patients" _n
+file write log "After exclude <90 days of continuous coverage after index date: `n_after' patients" _n
 
 
 drop if lookback_glp==1
@@ -438,9 +446,3 @@ erase lookback_diabetes_novel.dta
 erase lookback_glp_novel.dta
 erase lookback_dementia_novel.dta
 erase ndc_other_glp.dta
-* index_novel_comparisons.dta and cov_lookback_novel.dta are upstream inputs
-* for sens6_6mo_coverage (start_step 5), so keep them on disk for sensitivity
-* runs to read via $MAIN_OUTPUT_DIR. Re-enable the erase lines below only if
-* you're sure no scenario will re-run steps 5-6.
-* erase index_novel_comparisons.dta
-* erase cov_lookback_novel.dta

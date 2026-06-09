@@ -47,7 +47,10 @@ summary(data$bmi)
 # should be empty
 test <- data %>% filter(is.na(bmi))
 
-# one person with missing bmi -- exclude them
+# These patients had a Z68 code in lookback but its BMI category was unreadable:
+# step 06 reads the category from characters 4-5 of the code (substr(CODE,4,2)
+# then destring), so a non-standard or truncated Z68 code whose 4th-5th
+# characters aren't both digits yields a missing BMI. Exclude them.
 data %<>% filter(!is.na(bmi))
 n_after_bmi <- nrow(data)
 
@@ -239,14 +242,14 @@ if (file.exists(flowchart_path)) {
   flow <- readr::read_csv(flowchart_path, show_col_types = FALSE)
 
   r_side_steps <- c(
-    "After exclude missing BMI", "After exclude missing region",
+    "After exclude unreadable BMI/Z68 value", "After exclude missing region",
     "Subgroup novel semaglutide", "Subgroup novel tirzepatide",
     "Subgroup novel SGLT2", "Subgroup novel DPP4",
     "Subgroup novel sulfonylureas"
   )
   flow <- flow[!flow$step %in% r_side_steps, , drop = FALSE]
 
-  seq_steps <- c("After exclude missing BMI", "After exclude missing region")
+  seq_steps <- c("After exclude unreadable BMI/Z68 value", "After exclude missing region")
   seq_counts <- c(n_after_bmi, n_after_region)
   running <- tail(flow$novel, 1)
   excluded_seq <- integer(length(seq_counts))

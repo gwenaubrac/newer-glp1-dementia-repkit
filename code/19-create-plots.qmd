@@ -435,10 +435,8 @@ if (is_main) {
 ```{r}
 #| label: figure-1-flowchart
 #| warning: false
-# Build figure-1-flowchart from artefacts produced upstream:
-#   - <output_dir>/merge_counts.txt  (BOX 1 / BOX 2; written by 06)
-#   - <results_dir>/eligibility_steps_by_cohort.csv  (study-pop + analytic
-#     exclusions + per-class subgroup counts; written by 07 and updated by 14)
+# Build figure-1-flowchart from merge_counts.txt (written by 06) 
+# and eligibility_steps_by_cohort.csv (written by 07 and updated by 14)
 # Only built on the main run; sensitivity scenarios skip it so they don't
 # overwrite main's manuscript copy.
 if (!is_main) knitr::knit_exit()
@@ -462,7 +460,7 @@ flow <- readr::read_csv(flow_path, show_col_types = FALSE)
 flow$step <- as.character(flow$step)
 
 is_after <- grepl("^After exclude", flow$step)
-is_analytic <- flow$step %in% c("After exclude missing BMI",
+is_analytic <- flow$step %in% c("After exclude unreadable BMI/Z68 value",
                                 "After exclude missing region")
 is_subgroup <- grepl("^Subgroup novel", flow$step)
 study_pop <- flow[is_after & !is_analytic, , drop = FALSE]
@@ -516,12 +514,14 @@ wrap <- function(s, w = 42) paste(strwrap(s, width = w), collapse = "\n")
 
 box1_text <- paste0(
   wrap(sprintf(
-    "New users of study drugs between %s and %s without prior use in 12-month washout.",
+    "New users of study drugs between %s and %s without prior use in 12-month washout",
     study_start_lbl, study_end_lbl)),
   "\nN=", fmt_n(n_box1)
 )
 box2_text <- paste0(
-  sprintf("After requiring continuous coverage for %d months.", coverage_months),
+  wrap(sprintf(
+    "After requiring continuous coverage for %d months before index date",
+    coverage_months)),
   "\nN=", fmt_n(n_box2)
 )
 
