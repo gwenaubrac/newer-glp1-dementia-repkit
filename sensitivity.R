@@ -20,7 +20,7 @@
 
 .main <- list(
   label               = "Main analysis (default settings, no sensitivity override)",
-  weight_method       = "iptw",          # "iptw" or "ebal"
+  weight_method       = "iptw",          # "iptw" or "ebal" or "ow"
   weight_trimming     = FALSE,           # logical
   trimming_pct        = NULL,            # numeric in (0, 0.5) or NULL
   use_ipcw            = FALSE,           # logical; only affects PP analysis
@@ -73,7 +73,12 @@ SENSITIVITY_SCENARIOS <- list(
   sens9_age_cap = .override(.main,
     label = "Exclude patients aged >85 at baseline",
     start_step = 14L,                    # 14-clean-data
-    max_baseline_age = 85)
+    max_baseline_age = 85),
+
+  sens10_ow = .override(.main,
+    label = "Overlap weights instead of IPTW",
+    start_step = 17L,                    # 16-compute-iptw
+    weight_method = "ow"),
 )
 
 # Called by analysis scripts: returns the scenario named by SCENARIO_NAME env

@@ -14,12 +14,14 @@ The emulated trials are as follows:
 
 Save results in /../results
 
-Weights are truncated at the 2.5th and 97.5th percentiles. Entropy balancing weights are calculated for a sensitivity analysis at the end and saved as "ebal".
+Weights are truncated at the 2.5th and 97.5th percentiles.
 
 **Sensitivity-controlled options** (set by `SCENARIO` - see `sensitivity.R`):
 - `weight_trimming` + `trimming_pct`: when TRUE, drop patients with propensity scores outside the asymmetric quantile bounds (comparator upper `1 - trimming_pct`, treated lower `trimming_pct`) before computing IPTW.
 
 Entropy balancing weights are computed at the end and saved as `ebal` (the `weight_method = "ebal"` scenario uses them in the survival analyses).
+
+Overlap weights are computed at the end and saved as `ow` (the `weight_method = "ow"` scenario uses them in the survival analyses).
 
 Note: trimming before or after computing the weights does not matter.
 
@@ -31,6 +33,7 @@ library(dplyr)
 library(magrittr)
 library(haven)
 library(tidyr)
+library(PSweight)
 
 project_root <- Sys.getenv("PROJECT_ROOT")
 if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
@@ -661,6 +664,66 @@ bal3 <- rbind(bal3, fn_row)
 write.table(bal3, file.path(results_dir, "ebal3.csv"), col.names = T, row.names = T, append = F, sep = ',')
 ```
 
+## COMPUTE OVERLAP WEIGHTS 
+These are not used for the main analysis but are used for one of the sensitivity analyses (overlap weights instead of IPTW). 
+
+```{r}
+#| label: compute-overlap-weights
+# data 1:
+overlap_weights_out1 <- PSweight(
+  ps.formula = ps_formula,
+  data = data1,
+  weight = "overlap"
+)
+
+ps <- glm(ps_formula, data = data1, family = binomial)$fitted.values
+data1$ow <- ifelse(data1$trt == 1, 1 - ps, ps)
+
+bal1 <- SumStat(
+  ps.formula = ps_formula,
+  data = data1,
+  weight = "overlap"
+)
+
+write.table(bal1, file.path(results_dir, "overlap1.csv"), col.names = T, row.names = T, append = F, sep = ',')
+
+# data 2:
+overlap_weights_out2 <- PSweight(
+  ps.formula = ps_formula,
+  data = data2,
+  weight = "overlap"
+)
+
+ps <- glm(ps_formula, data = data2, family = binomial)$fitted.values
+data1$ow <- ifelse(data2$trt == 1, 1 - ps, ps)
+
+bal2 <- SumStat(
+  ps.formula = ps_formula,
+  data = data2,
+  weight = "overlap"
+)
+
+write.table(bal2, file.path(results_dir, "overlap2.csv"), col.names = T, row.names = T, append = F, sep = ',')
+
+# data 3:
+overlap_weights_out3 <- PSweight(
+  ps.formula = ps_formula,
+  data = data3,
+  weight = "overlap"
+)
+
+ps <- glm(ps_formula, data = data3, family = binomial)$fitted.values
+data3$ow <- ifelse(data1$trt == 1, 1 - ps, ps)
+
+bal3 <- SumStat(
+  ps.formula = ps_formula,
+  data = data3,
+  weight = "overlap"
+)
+
+write.table(bal3, file.path(results_dir, "overlap3.csv"), col.names = T, row.names = T, append = F, sep = ',')
+```
+
 ## SAVE COHORT DATA WITH WEIGHTS
 
 ```{r}
@@ -669,7 +732,8 @@ data1 %<>%
   mutate(
     wfinal = ipcw_switch * ipcw_disc * iptw,
     swfinal = ipcw_switch * ipcw_disc * siptw,
-    ebalfinal = ipcw_switch + ipcw_disc * ebal 
+    ebalfinal = ipcw_switch * ipcw_disc * ebal,
+    owfinal = ipcw_switch * ipcw_disc * ow
   )
 
 
@@ -677,7 +741,8 @@ data2 %<>%
   mutate(
     wfinal = ipcw_switch * ipcw_disc * iptw,
     swfinal = ipcw_switch * ipcw_disc * siptw,
-    ebalfinal = ipcw_switch + ipcw_disc * ebal
+    ebalfinal = ipcw_switch * ipcw_disc * ebal,
+    owfinal = ipcw_switch * ipcw_disc * ow
   )
 
 
@@ -685,7 +750,8 @@ data3 %<>%
   mutate(
     wfinal = ipcw_switch * ipcw_disc * iptw,
     swfinal = ipcw_switch * ipcw_disc * siptw,
-    ebalfinal = ipcw_switch + ipcw_disc * ebal
+    ebalfinal = ipcw_switch * ipcw_disc * ebal,
+    owfinal = ipcw_switch * ipcw_disc * ow
   )
 
 # save all cohort dataframes
@@ -738,7 +804,7 @@ sink()
 #### DESCRIBE THE WEIGHTS ####
 
 weights_summary_d1 <- data1 %>%
-  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal),
+  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal, ow, owfinal),
                names_to = "Weight_Type", values_to = "value") %>%
   group_by(Weight_Type) %>%
   summarise(
@@ -755,7 +821,7 @@ weights_summary_d1 <- data1 %>%
 
 
 weights_summary_d2 <- data2 %>%
-  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal),
+  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal, ow, owfinal),
                names_to = "Weight_Type", values_to = "value") %>%
   group_by(Weight_Type) %>%
   summarise(
@@ -772,7 +838,7 @@ weights_summary_d2 <- data2 %>%
 
 
 weights_summary_d3 <- data3 %>%
-  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal),
+  pivot_longer(cols = c(iptw, siptw, wfinal, swfinal, ebal, ebalfinal, ow, owfinal),
                names_to = "Weight_Type", values_to = "value") %>%
   group_by(Weight_Type) %>%
   summarise(

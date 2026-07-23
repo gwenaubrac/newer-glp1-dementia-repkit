@@ -24,7 +24,7 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 - data3: nvel GLP1 vs sulfo
 
 **Sensitivity-controlled options** (set by `SCENARIO` - see `sensitivity.R`):
-- `weight_method` (`"iptw"` or `"ebal"`): which weight column is used for the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP.
+- `weight_method` (`"iptw"` or `"ebal"` or `"ow"`): which weight column is used for the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP. `"ow"` uses `ow` for ITT and (depending on `use_ipcw`) `ow` or `owfinal` for PP.
 - `use_ipcw`: if TRUE, the PP analysis combines IPTW (or entropy) with IPCW for switch/discontinuation.
 - `followup_start` (`"after_grace"` or `"index_date"`): start follow-up `index + 90d` (default) or at `index`.
 - `extra_followup_days` (integer): when 0, keep patients with any positive follow-up (original behavior); when N>0, require `follow_up >= N` days in both ITT and PP cohorts.
@@ -51,12 +51,17 @@ SCENARIO <- get_scenario()
 
 # Resolve weight columns from scenario settings. `siptw`/`swfinal`/`ebal`/`ebalfinal`
 # are columns written by 16-compute-iptw.qmd; see there for their construction.
-itt_weight_col <- if (identical(SCENARIO$weight_method, "ebal")) "ebal" else "siptw"
-pp_weight_col  <- if (identical(SCENARIO$weight_method, "ebal")) {
-  if (isTRUE(SCENARIO$use_ipcw)) "ebalfinal" else "ebal"
-} else {
-  if (isTRUE(SCENARIO$use_ipcw)) "swfinal" else "siptw"
-}
+itt_weight_col <- switch(SCENARIO$weight_method,
+  "ebal" = "ebal",
+  "ow" = "ow",
+  "siptw" # default
+)
+
+pp_weight_col <- switch(SCENARIO$weight_method,
+  "ebal" = if (isTRUE(SCENARIO$use_ipcw)) "ebalfinal" else "ebal",
+  "ow" = if (isTRUE(SCENARIO$use_ipcw)) "owfinal"   else "ow",
+  if (isTRUE(SCENARIO$use_ipcw)) "swfinal" else "siptw" # default
+)
 
 # Follow-up start offset in days from index.
 fu_offset_days <- if (identical(SCENARIO$followup_start, "index_date")) 0L else 90L
@@ -260,7 +265,7 @@ for (outcome in c(dementia_outcomes)) {
     
     
     # Weighted ITT model; weight column chosen from SCENARIO$weight_method
-    # (siptw for "iptw" scenarios, ebal for "ebal" scenarios).
+    # (siptw for "iptw" scenarios, ebal for "ebal" scenarios, ow for "ow" scenarios).
     cox_mod_itt <- coxph(Surv(itt_follow_up, itt_event) ~ trt,
                          data = cohort,
                          weights = cohort[[itt_weight_col]],
@@ -398,6 +403,8 @@ for (outcome in c(dementia_outcomes)) {
     #   iptw, ipcw: uses swfinal (sens4_pp_ipcw)
     #   ebal, no ipcw: uses ebal (sens1_ebal)
     #   ebal, ipcw: uses ebalfinal
+    #   ow, no ipcw: uses ow (sens1_ow)
+    #   ow, ipcw: uses owfinal
     cox_mod_pp <- coxph(Surv(pp_follow_up, pp_event) ~ trt,
                             data = cohort,
                             weights = cohort[[pp_weight_col]],
@@ -625,7 +632,8 @@ if (is_main) {
     "sens6_6mo_coverage",
     "sens7_index_followup",
     "sens8_6mo_followup",
-    "sens9_age_cap"
+    "sens9_age_cap",
+    "sens10_ow",
   )
   sens_order <- c(sens_order,
                   setdiff(names(SENSITIVITY_SCENARIOS), sens_order))

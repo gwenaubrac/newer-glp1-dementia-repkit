@@ -84,6 +84,7 @@ Per-scenario results land in `results/<scenario_name>/` (main's live in `results
 | `sens7_index_followup` | Start follow-up at index date (include early events) | `14-clean-data` |
 | `sens8_6mo_followup` | Require 6 months of follow-up after index, excluding early events | `14-clean-data` |
 | `sens9_age_cap` | Exclude patients aged >85 at baseline | `14-clean-data` |
+| `sens10_ow` | Overlap weights instead of IPTW | `16-compute-iptw` |
 
 To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The analysis scripts that read scenario parameters are `05`, `14`, `16`, `17`, `18`, and `19`.
 
