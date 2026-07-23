@@ -86,7 +86,7 @@ cov_list <- readRDS(out_path("cov_list_novel.rds"))
 
 max_fu <- 730 # truncate follow-up up to 2 years after entry
 
-#### 1. ALL-CAUSE DEMENTIA & SUBTYPES ####
+#### SURVIVAL ANALYSES ####
 
 # here, patients will not be censored if they experience all-cause dementia
 # since all-cause dementia or its subtypes are the events of interest
@@ -481,6 +481,243 @@ saveRDS(
   file.path(results_dir, "all_cox_results_novel.rds")
 )
 
+```
+
+## FALSIFICATION TEST: RISK IN FIRST 90 DAYS
+
+As a falsification test, we can look at the risk of dementia in the first 90 days of follow-up, when a true preventive effect is implausible. If a treatment effect is found, it would suggest confounding as the groups have a different baseline risk of dementia. 
+
+```{r}
+# save results from all models
+all_cox_results_fals <- list()
+
+# save follow-up times and event count for each analysis
+followup_times_fals <- data.frame(
+  cohort = NA,
+  approach = NA,
+  outcome = NA,
+  mean = NA,
+  min = NA,
+  max = NA,
+  median = NA,
+  q1 = NA,
+  q3 = NA,
+  n_trt = NA,
+  n_comp = NA,
+  n_events = NA,
+  n_events_trt = NA,
+  n_events_comp = NA
+)
+
+# save proportional hazards assumption test for each model
+cox_ph_fals <- data.frame(
+  cohort = NA,
+  approach = NA,
+  outcome = NA,
+  pvalue = NA
+)
+
+# define outcomes as named within dataset var names:
+# ex: "dementia_allcause" with var names "outcome_dementia_allcause_date" and res will be saved as "dementia_allcause"
+
+dementia_outcomes <- c(
+  # dementia outcomes:
+  "dementia_allcause",
+)
+
+for (outcome in c(dementia_outcomes)) {
+  
+  for (cohort_name in c("data1", "data2", "data3")) {
+
+    cohort <- get(cohort_name)
+    
+    date_name <- paste0("outcome_", outcome, "_date")
+    
+    
+    if (cohort_name == "data1") {
+      ref <- "SGLT2"
+      index <- "Semaglutide/Tirzepatide"
+    } else if (cohort_name == "data2") {
+      ref <- "DPP4"
+      index <- "Semaglutide/Tirzepatide"
+    } else if (cohort_name == "data3") {
+      ref <- "Sulfonylureas"
+      index <- "Semaglutide/Tirzepatide"
+    }
+
+    
+    ### ITT APPROACH ###
+    
+    # describe follow-up (ITT)
+    cohort$study_end <- end_date
+    
+    cohort$itt_exit_date <- pmin(
+      cohort$dod, # date of death
+      cohort$cov_end, # end of coverage
+      cohort$study_end, # end of study
+      cohort$index_date + 90, # at most 90 days after follow-up
+      na.rm = TRUE
+    )
+    
+    summary(cohort$itt_exit_date)
+
+    # Start follow-up `fu_offset_days` on index date
+    cohort$f_up_start <- cohort$index_date 
+
+    # create indicator for itt_event
+    # no event if no date of event or if occurred after ITT exit
+    # !!sym(date_name) takes the date for the event being analyzed in this loop
+
+    cohort %<>%
+      mutate (itt_event = if_else(!is.na(!!sym(date_name)) & !!sym(date_name) < itt_exit_date & !!sym(date_name) >= f_up_start, 1, 0),
+              itt_event_date = if_else(itt_event == 1, !!sym(date_name), NA))
+    
+    table(cohort$itt_event)
+    
+    # update itt exit date if there was an event
+    # so that follow-up additionally ends at event occurrence
+    cohort %<>%
+      mutate(itt_exit_date = if_else(itt_event == 1, itt_event_date, itt_exit_date))
+    
+    cohort$itt_follow_up <- time_length(interval(as.Date(cohort$f_up_start), as.Date(cohort$itt_exit_date)), 'days')
+    summary(cohort$itt_follow_up)
+
+    cohort %<>% filter(itt_follow_up > 0)
+
+    # fill in info on follow-up
+    followup_times_fals <- rbind(
+      followup_times_fals,
+      data.frame(
+        cohort = cohort_name,
+        approach = "itt",
+        outcome = outcome,
+        mean = mean(cohort$itt_follow_up),
+        min = min(cohort$itt_follow_up),
+        max = max(cohort$itt_follow_up),
+        median = median(cohort$itt_follow_up),
+        q1 = quantile(cohort$itt_follow_up, 0.25),
+        q3 = quantile(cohort$itt_follow_up, 0.75),
+        n_trt = sum(cohort$trt==1),
+        n_comp = sum(cohort$trt==0),
+        n_events = sum(cohort$itt_event),
+        n_events_trt = sum(cohort$itt_event[cohort$trt==1]),
+        n_events_comp = sum(cohort$itt_event[cohort$trt==0])
+      )
+    )
+    
+    
+    # fit survival models
+    # crude ITT model: 
+    cox_mod_itt_crude <- coxph(Surv(itt_follow_up, itt_event) ~ trt, 
+                         data = cohort, 
+                         cluster = PATIENT_ID, 
+                         robust = TRUE)
+
+    coxph_p <- cox.zph(cox_mod_itt_crude)$table["trt", "p"]
+    
+    cox_ph_fals <- rbind(
+      cox_ph_fals,
+      data.frame(
+        cohort = cohort_name,
+        approach = "itt crude",
+        outcome = outcome,
+        pvalue = coxph_p
+      )
+    )
+    
+    cox_mod_itt_res_crude <- tidy(cox_mod_itt_crude, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(
+        cohort = cohort_name,
+        outcome = outcome,
+        approach = "itt_crude"
+      ) %>%
+      select(cohort, outcome, approach, term, 
+             hr = estimate, ci_lower = conf.low, ci_upper = conf.high, 
+             pvalue = p.value)
+    
+    
+    all_cox_results_fals[[paste(outcome, cohort_name, "itt_crude", sep = "_")]] <- cox_mod_itt_res_crude
+    
+    km_curve_itt_crude <- survfit(Surv(itt_follow_up, itt_event) ~ trt, 
+                            data = cohort)
+    
+    
+    
+    
+    # Weighted ITT model
+    cox_mod_itt <- coxph(Surv(itt_follow_up, itt_event) ~ trt,
+                         data = cohort,
+                         weights = "siptw",
+                         cluster = PATIENT_ID,
+                         robust = TRUE)
+
+    coxph_p <- cox.zph(cox_mod_itt)$table["trt", "p"]
+    
+    cox_ph_fals <- rbind(
+      cox_ph_fals,
+      data.frame(
+        cohort = cohort_name,
+        approach = "itt IPTW",
+        outcome = outcome,
+        pvalue = coxph_p
+      )
+    )
+
+    cox_mod_itt_res <- tidy(cox_mod_itt, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(
+        cohort = cohort_name,
+        outcome = outcome,
+        approach = "itt"
+      ) %>%
+      select(cohort, outcome, approach, term, 
+             hr = estimate, ci_lower = conf.low, ci_upper = conf.high, 
+             pvalue = p.value)
+    
+    
+    all_cox_results_fals[[paste(outcome, cohort_name, "itt", sep = "_")]] <- cox_mod_itt_res
+  }
+}
+
+
+rm(cohort, cohort_name, outcome)
+gc()
+
+
+#### SAVE MODEL RESULTS ####
+
+write.csv(
+  followup_times_fals,
+  file.path(results_dir, "followup_times_fals.csv"),
+  row.names = FALSE
+)
+
+cox_ph_fals %<>%
+  mutate(
+    flag = if_else(pvalue<0.05, 1, 0)
+  )
+
+write.csv(
+  cox_ph_fals,
+  file.path(results_dir, "cox_ph_fals.csv"),
+  row.names = FALSE
+)
+
+summary_table_fals <- bind_rows(all_cox_results_fals)
+
+summary_table_fals <- summary_table_fals %>%
+  mutate(across(where(is.numeric), ~round(., 2)))
+
+
+write.csv(
+  summary_table_fals,
+  file.path(results_dir, "all_cox_results_fals.csv"),
+  row.names = FALSE
+)
+
+saveRDS(
+  summary_table_fals,
+  file.path(results_dir, "all_cox_results_novel_fals.rds")
+)
 ```
 
 ## FINAL TABLE FOR MANUSCRIPT 
