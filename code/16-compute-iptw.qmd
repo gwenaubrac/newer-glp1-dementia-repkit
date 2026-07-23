@@ -528,7 +528,8 @@ These are not used for the main analysis but are used for one of the sensitivity
 ebal_weights_out1 <- WeightIt::weightit(
   formula = ps_formula,
   data = data1,
-  method = "ebal"
+  method = "ebal",
+  estimand = "ATE"
 )
 
 summary(ebal_weights_out1$weights)
@@ -565,7 +566,8 @@ ps_formula_2ebal <- as.formula(paste("trt ~", paste(ebal_cov_list_2, collapse = 
 ebal_weights_out2 <- WeightIt::weightit(
   formula = ps_formula_2ebal,
   data = data2,
-  method = "ebal"
+  method = "ebal",
+  estimand = "ATE"
 )
 
 summary(ebal_weights_out2$weights)
@@ -617,7 +619,8 @@ ps_formula_3ebal <- as.formula(paste("trt ~", paste(ebal_cov_list_3, collapse = 
 ebal_weights_out3 <- WeightIt::weightit(
   formula = ps_formula_3ebal,
   data = data3,
-  method = "ebal"
+  method = "ebal",
+  estimand = "ATE"
 )
 
 summary(ebal_weights_out3$weights)
