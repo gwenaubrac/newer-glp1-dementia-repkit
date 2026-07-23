@@ -407,10 +407,10 @@ count
 local n_after = r(N)
 file write log "After exclude age<60: `n_after' patients" _n
 
-drop if age >=85
-count
-local n_after = r(N)
-file write log "After exclude age>=85: `n_after' patients" _n
+*drop if age >=85
+*count
+*local n_after = r(N)
+*file write log "After exclude age>=85: `n_after' patients" _n
 
 
 drop if missing(age)

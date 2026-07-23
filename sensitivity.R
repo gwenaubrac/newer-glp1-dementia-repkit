@@ -71,9 +71,9 @@ SENSITIVITY_SCENARIOS <- list(
     extra_followup_days = 90L),
 
   sens9_age_cap = .override(.main,
-    label = "Exclude patients aged >85 at baseline",
+    label = "Exclude patients aged >=85 at baseline",
     start_step = 14L,                    # 14-clean-data
-    max_baseline_age = 85),
+    max_baseline_age = 84),
 
   sens10_ow = .override(.main,
     label = "Overlap weights instead of IPTW",
