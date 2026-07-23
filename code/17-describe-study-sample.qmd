@@ -75,7 +75,6 @@ labels <- c(
   hypoglyc = "Hypoglycemia",
   dyslipid = "Dyslipidemia",
   eskd = "End-stage kidney disease",
-  hf = "Heart failure",
   hepa = "Hepatic disease",
   hyper = "Hypertension",
   ihd = "Ischemic heart disease",
@@ -89,6 +88,13 @@ labels <- c(
   thyroid = "Thyroid disorders",
   depression = "Depression",
   anxiety = "Anxiety",
+  falls = "Falls",
+  fractures = "Fractures",
+  care_dependency = "Care dependency and mobility issues",
+  malnutrition = "Malnutrition",
+  aki = "Acute kidney injury",
+  proteinuria = "Proteinuria",
+  hf_hosp = "Hospitalization for heart failure",
   hosp_cat = "Number of hospitalizations",
   emerg_cat = "Number of emergency service use",
   statin = "Statins",
@@ -99,6 +105,7 @@ labels <- c(
   aceinhibitor = "ACE inhibitors",
   insulin = "Insulin",
   metformin = "Metformin",
+  diuretic = "Loop diuretic",
   prop_b_q = "ZIP5-level quintile of proportion with a Bachelor's or higher",
   gender = "Sex",
   year = "Initiation year",
@@ -132,8 +139,10 @@ cov_list <- c(
 
   # Comorbidities (alphabetical by label)
   "alcohol",
+  "aki",
   "anxiety",
   "cancer",
+  "care_dependency",
   "cvd",
   "ckd",
   "copd",
@@ -145,12 +154,16 @@ cov_list <- c(
   "dyslipid",
   "edema",
   "eskd",
+  "falls",
+  "fractures",
   "hepa",
-  "hf",
+  "hf_hosp"
   "hypoglyc",
   "hyper",
   "ihd",
+  "malnutrition",
   "nafld",
+  "proteinuria",
   "pvd",
   "apnea",
   "thyroid",
@@ -165,7 +178,8 @@ cov_list <- c(
   "insulin",
   "metformin",
   "statin",
-  "thiazide"
+  "thiazide",
+  "diuretic"
 )
 
 

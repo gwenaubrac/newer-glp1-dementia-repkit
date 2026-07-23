@@ -113,7 +113,6 @@ cov_clinic <- c(
   "hypoglyc",
   "dyslipid",
   "eskd",
-  "hf",
   "hepa",
   "hyper",
   "ihd",
@@ -127,6 +126,13 @@ cov_clinic <- c(
   "thyroid",
   "depression",
   "anxiety",
+  "falls", 
+  "fractures",
+  "care_dependency",
+  "malnutrition",
+  "aki",
+  "proteinuria",
+  "hf_hosp",
   "hosp_cat",
   "emerg_cat",
   "statin", 
@@ -137,6 +143,7 @@ cov_clinic <- c(
   "aceinhibitor",
   "insulin",
   "metformin",
+  "diuretic",
   #"thiazolidinediones" none found for now
   "prop_b_q"
           )

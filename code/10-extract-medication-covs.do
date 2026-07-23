@@ -187,6 +187,25 @@ duplicates drop
 save ndc_insulin_code, replace
 
 
+* ============================================================================
+* NDC Codes for loop diuretics
+* ============================================================================
+
+clear
+odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
+
+sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
+keep if strpos(PRECISE_GENERIC_NAME, "FUROSEMIDE") | strpos(PRECISE_GENERIC_NAME, "BUMETANIDE") | strpos(PRECISE_GENERIC_NAME, "TORSEMIDE") | strpos(PRECISE_GENERIC_NAME, "ETHACRYNIC ACID")
+
+drop CODE_TYPE PRODUCT_NAME KH_ROUTE_ARRAY KH_THERAPEUTIC_CLASS_ARRAY PRECISE_GENERIC_NAME
+
+gen diuretic=1
+
+duplicates drop
+
+save ndc_diuretic_code, replace
+
+
 * now we can identify prior use of these medications
 
 * ============================================================================
@@ -1153,3 +1172,122 @@ save cov_metformin_novel, replace
 
 local n_flag = _N
 display "Patients with metformin in study window: `n_flag'"
+
+
+* ============================================================================
+* Identify diuretic use
+* ============================================================================
+
+* run this entire code section at the same time since uses temporary files
+
+* --- prep cohort lookup (used inside the chunk loop) ---
+use final_novel, clear
+keep PATIENT_ID index_date lookback_date
+duplicates drop PATIENT_ID, force   // ensure m:1 will work
+tempfile cohort
+save `cohort'
+
+* --- get list of diuretic NDC codes ---
+use ndc_diuretic_code, clear
+keep CODE
+duplicates drop
+
+local total_codes = _N
+display "Total diuretic codes: `total_codes'"
+
+* we will split up query into chunks to deal with memory limitations
+local chunk_size 1000
+
+* store results in temporary file
+clear
+tempfile all_diuretic_prescriptions
+gen PATIENT_ID = ""
+gen DATE_OF_SERVICE = .
+gen NDC11 = ""
+gen index_date = .
+gen lookback_date = .
+save `all_diuretic_prescriptions', replace emptyok
+
+local n_chunks = ceil(`total_codes' / `chunk_size')
+display "Will process `n_chunks' chunks"
+
+* process each chunk
+forvalues chunk = 1/`n_chunks' {
+    
+    display "Processing chunk `chunk' of `n_chunks'..."
+    
+    local start_row = (`chunk' - 1) * `chunk_size' + 1
+    local end_row = min(`chunk' * `chunk_size', `total_codes')
+    
+    use ndc_diuretic_code, clear
+    keep in `start_row'/`end_row'
+    keep CODE
+    
+    // Create comma-separated list with quotes around each code
+    local code_list ""
+    qui count
+    local n_codes = r(N)
+    forvalues i = 1/`n_codes' {
+        local code = CODE[`i']
+        if `i' == 1 {
+            local code_list "'`code''"
+        }
+        else {
+            local code_list "`code_list', '`code''"
+        }
+    }
+    
+    display "Code list sample: " substr("`code_list'", 1, 100) "..."
+    
+    clear
+    odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
+    
+    * dedup within chunk
+    gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
+    
+    * filter to cohort patients only
+    merge m:1 PATIENT_ID using `cohort', keep(match) nogen ///
+        keepusing(index_date lookback_date)
+    
+    * shrink storage before saving
+    compress
+    
+    * accumulate
+    append using `all_diuretic_prescriptions'
+    save `all_diuretic_prescriptions', replace
+    
+    local n_so_far = _N
+    display "Chunk `chunk' complete: `n_so_far' cohort prescriptions so far"
+}
+
+* --- final result ---
+use `all_diuretic_prescriptions', clear
+compress
+
+* optional safety dedup
+gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
+
+gen cov_diuretic = 1
+
+local n_total = _N
+display "Total diuretic prescriptions found: `n_total'"
+
+* create filter for only rx occurring during 1 year baseline
+* with only 1 row per patient ID and flag for whether had rx or not
+keep if DATE_OF_SERVICE <= index_date & DATE_OF_SERVICE >= lookback_date
+gen diuretic = 1
+keep PATIENT_ID diuretic
+gduplicates drop PATIENT_ID, force
+
+tempfile diuretic_flag
+save `diuretic_flag'
+
+use final_novel, clear
+keep PATIENT_ID
+merge 1:1 PATIENT_ID using `diuretic_flag', keep(master match) nogen
+replace diuretic = 0 if missing(diuretic)
+
+save cov_diuretic_novel, replace
+
+local n_flag = _N
+display "Patients with diuretic in study window: `n_flag'"
