@@ -831,14 +831,14 @@ nco_labels <- c(
   basal        = "Basal cell carcinoma"
 )
 
-e_tab4 <- do.call(rbind, lapply(names(nco_labels), function(out) {
+e_tab5 <- do.call(rbind, lapply(names(nco_labels), function(out) {
   c(`Negative Control Outcome` = nco_labels[[out]], fmt_hr(summary_table, "itt", out = out))
 }))
-e_tab4 <- as.data.frame(e_tab4, stringsAsFactors = FALSE)
-colnames(e_tab4) <- c("Negative Control Outcome", unname(cohort_cols))
-write_manuscript_xlsx(e_tab4,
-                      file.path(manuscript_tab_dir, "e-table-4-nco.xlsx"),
-                      sheet = "e-Table 4")
+e_tab5 <- as.data.frame(e_tab5, stringsAsFactors = FALSE)
+colnames(e_tab5) <- c("Negative Control Outcome", unname(cohort_cols))
+write_manuscript_xlsx(e_tab5,
+                      file.path(manuscript_tab_dir, "e-table-5-nco.xlsx"),
+                      sheet = "e-Table 5")
 ```
 
 ```{r}

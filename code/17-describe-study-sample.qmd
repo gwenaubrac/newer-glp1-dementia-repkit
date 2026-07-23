@@ -355,7 +355,7 @@ sink()
 ```
 
 
-### FINAL TABLE FOR THE MANUSCRIPT
+## FINAL TABLE 1 FOR THE MANUSCRIPT
 
 ```{r}
 #| label: save-final-table1
@@ -536,4 +536,68 @@ setColWidths(wb, 1, cols = 2:nc, widths = 18)
 saveWorkbook(wb, file.path(manuscript_tab_dir, "table-1-patient-char.xlsx"),
              overwrite = TRUE)
 }
+```
+
+## E-TABLE 4 TO DESCRIBE WEIGHTS
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+weight_labels <- c(
+  siptw = "  Stabilized IPTW (ITT analysis)",
+  ipcw_switch = "  IPCW for switch",
+  ipcw_disc = "  IPCW for discontinuation",
+  swfinal = "  Combined weight (PP analysis)"
+)
+
+summarize_weights <- function(df) {
+  df %>%
+    select(all_of(names(weight_labels))) %>%
+    pivot_longer(everything(), names_to = "weight", values_to = "value") %>%
+    group_by(weight) %>%
+    summarize(
+      Mean = mean(value,   na.rm = TRUE),
+      Min = min(value,    na.rm = TRUE),
+      Max = max(value,    na.rm = TRUE),
+      Median = median(value, na.rm = TRUE),
+      Q1 = quantile(value, 0.25, na.rm = TRUE),
+      Q3 = quantile(value, 0.75, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(weight = factor(weight, levels = names(weight_labels))) %>%
+    arrange(weight) %>%
+    mutate(
+      across(c(Mean, Min, Max, Median, Q1, Q3), ~ sprintf("%.2f", .x)),
+      Weight = weight_labels[as.character(weight)],
+      IQR = paste0(Q1, "\u2013", Q3)
+    ) %>%
+    select(Weight, Mean, Min, Max, Median, IQR)
+}
+
+# Helper: a full-width section header row (label in Weight, blanks elsewhere)
+header_row <- function(label) {
+  tibble(Weight = label, Mean = "", Min = "", Max = "", Median = "", IQR = "")
+}
+
+# Map each dataframe to its cohort header
+datasets <- list(
+  "GLP-1 vs SGLT2" = data1,
+  "GLP-1 vs DPP4" = data2,
+  "GLP-1 vs sulfonylureas" = data3
+)
+
+e_tab4 <- bind_rows(
+  lapply(names(datasets), function(nm) {
+    bind_rows(header_row(nm), summarize_weights(datasets[[nm]]))
+  })
+)
+
+e_tab4
+
+write.csv(
+  e_tab4,
+  file.path(manuscript_tab_dir, "etable-4-weights.csv"),
+  row.names = FALSE
+)
 ```
