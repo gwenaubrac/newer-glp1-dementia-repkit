@@ -44,7 +44,7 @@ cd Desktop/newer-glp1-dementia-repkit
 
 The runner executes the 20 scripts in `code/` in order. Intermediate files go to `output/`, final results to `results/`, manuscript-ready figures/tables to `manuscript/figures/` and `manuscript/tables/`, per-step logs to `logs/<YYYYMMDD>/`.
 
-> **Note on the manuscript folder.** The pipeline auto-populates `manuscript/figures/` with `figure-1-flowchart`, `figure-2-forest-plot`, and `figure-3-km-curves` (each as PDF + TIFF), and `manuscript/tables/` with `table-1-patient-char.csv`, `table-2-results.csv`, and `e-table-4-nco.csv`. Any other tables or figures that appear in the manuscript folder (e.g., e-tables 1-3, table 3) were added by the authors directly and are not produced by the pipeline.
+> **Note on the manuscript folder.** The pipeline auto-populates `manuscript/figures/` with `figure-1-flowchart`, `figure-2-forest-plot`, and `figure-3-km-curves` (each as PDF + TIFF), and `manuscript/tables/` with `table-1-patient-char.csv`, `table-2-results.csv`, `e-table-4-weights.csv`, and `e-table-5-nco.csv`. Any other tables or figures that appear in the manuscript folder (e.g., e-tables 1-3, table 3) were added by the authors directly and are not produced by the pipeline.
 
 **Useful flags** (pass to `Rscript run_all.R …` or the wrapper):
 
