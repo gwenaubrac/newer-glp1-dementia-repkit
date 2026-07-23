@@ -211,6 +211,66 @@ collapse (max) lookback_diabetesT1 lookback_pancreatitis lookback_thy_can lookba
 save contra_novel, replace
 
 
+* ============================================================================
+* Evidence of MCI
+* ============================================================================
+
+clear
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'G3184%');") dsn("$SNOWFLAKE_DSN")
+merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
+keep if CLAIM_DATE <= index_date
+keep if CLAIM_DATE >= lookback_date
+
+gen lookback_mci = 0
+
+gen code_5 = substr(CODE,1,5)
+
+replace lookback_mci = 1 if code_5 == "G3184"
+
+keep if lookback_mci==1
+collapse (max) lookback_mci, by(PATIENT_ID)
+
+save mci_novel, replace
+
+
+
+* ============================================================================
+* Prior neuroimaging order
+* ============================================================================
+
+* search in medical headers
+clear
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE code IN ('B030ZZZ', 'B020ZZZ');") dsn("$SNOWFLAKE_DSN")
+merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
+keep if CLAIM_DATE <= index_date
+keep if CLAIM_DATE >= lookback_date
+
+gen lookback_neuro_mh = 0
+
+replace lookback_neuro_mh = 1 if inlist(code, "B030ZZZ", "B020ZZZ")
+
+keep if lookback_neuro_mh==1
+collapse (max) lookback_neuro_mh, by(PATIENT_ID)
+
+save neuro_mh_novel, replace
+
+* search in service lines
+clear
+odbc load, exec("SELECT DISTINCT PATIENT_ID, PROCEDURE, SERVICE_FROM FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_SERVICE_LINES_LATEST  WHERE PROCEDURE IN ('70551', '70552', '70553', '70555', '70450', '70460', '70470', '0865T', '0866T');") dsn("$SNOWFLAKE_DSN")
+merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
+keep if CLAIM_DATE <= index_date
+keep if CLAIM_DATE >= lookback_date
+
+gen lookback_neuro_sl = 0
+
+replace lookback_neuro_sl = 1 if inlist(PROCEDURE, '70551', '70552', '70553', '70555', '70450', '70460', '70470', '0865T', '0866T')
+
+keep if lookback_neuro_sl==1
+collapse (max) lookback_neuro_sl, by(PATIENT_ID)
+
+save neuro_sl_novel, replace
+
+
 
 * ============================================================================
 * BMI in lookback 
@@ -334,6 +394,9 @@ merge 1:1 PATIENT_ID using dod_novel, keep (1 3) nogen
 merge 1:1 PATIENT_ID using lookback_bmi_novel, keep(1 3)
 merge 1:1 PATIENT_ID using age_novel, keep (1 3) nogen
 merge 1:1 PATIENT_ID using contra_novel, keep (1 3) nogen
+merge 1:1 PATIENT_ID using mci_novel, keep (1 3) nogen
+merge 1:1 PATIENT_ID using neuro_mh_novel, keep (1 3) nogen
+merge 1:1 PATIENT_ID using neuro_sl_novel, keep (1 3) nogen
 merge 1:1 PATIENT_ID using cov_end_novel, keep (1 3) nogen
 merge 1:1 PATIENT_ID using lookback_glp_novel, keep (1 3) nogen
 
@@ -406,6 +469,24 @@ local n_after = r(N)
 file write log "After exclude gastroparesis: `n_after' patients" _n
 
 
+drop if lookback_mci==1
+count
+local n_after = r(N)
+file write log "After exclude MCI: `n_after' patients" _n
+
+
+drop if lookback_neuro_mh==1
+count
+local n_after = r(N)
+file write log "After exclude prior neuroimaging (medical headers): `n_after' patients" _n
+
+
+drop if lookback_neuro_sl==1
+count
+local n_after = r(N)
+file write log "After exclude prior neuroimaging (service lines): `n_after' patients" _n
+
+
 drop if cov_end < index_date + 90
 count
 local n_after = r(N)
@@ -447,6 +528,7 @@ erase dod_novel.dta
 erase lookback_bmi_novel.dta
 erase age_novel.dta
 erase contra_novel.dta
+erase mci_novel.dta
 erase lookback_diabetes_novel.dta
 erase lookback_glp_novel.dta
 erase lookback_dementia_novel.dta
