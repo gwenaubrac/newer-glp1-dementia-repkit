@@ -7,7 +7,7 @@ embed-resources: true
 
 ## Overview
 
-This notebook identifies first use of one of the drugs of interest during the study period of interest. The first medication used during the study period is the index medication, and the date of first dispensing is the index date. We then use a 12 months washout period to exclude patients with prior use of the index drug, comparator drug, or other GLP-1 agonists in those 12 months. We are also excluding patients who initiate multiple study drugs on the same day. As an exception, given that semaglutide and tirzepatide are treated interchangeably in this analysis, patients who initiate both tirzepatide and semaglutide on the same day are not excluded. 
+This notebook identifies first use of one of the drugs of interest during the study period of interest. The first medication used during the study period is the index medication, and the date of first dispensing is the index date. We then use a 12 months washout period to exclude patients with prior use of the index drug or comparator drug in those 12 months. We are also excluding patients who initiate multiple study drugs on the same day. As an exception, given that semaglutide and tirzepatide are treated interchangeably in this analysis, patients who initiate both tirzepatide and semaglutide on the same day are not excluded. 
 
 Study period: May 2022 - January 2026
 
