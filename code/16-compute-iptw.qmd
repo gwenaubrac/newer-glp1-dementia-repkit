@@ -670,58 +670,79 @@ These are not used for the main analysis but are used for one of the sensitivity
 ```{r}
 #| label: compute-overlap-weights
 # data 1:
-overlap_weights_out1 <- PSweight(
-  ps.formula = ps_formula,
-  data = data1,
-  weight = "overlap"
-)
-
 ps <- glm(ps_formula, data = data1, family = binomial)$fitted.values
 data1$ow <- ifelse(data1$trt == 1, 1 - ps, ps)
 
-bal1 <- SumStat(
-  ps.formula = ps_formula,
-  data = data1,
-  weight = "overlap"
-)
+bal_tab1_ow <- bal.tab(ps_formula,
+                    data = data1,
+                    weights = 'ow',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
 
-write.table(bal1, file.path(results_dir, "overlap1.csv"), col.names = T, row.names = T, append = F, sep = ',')
+bal1_ow <- bal_tab1_ow$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (OW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal1_ow$Variable <- row.names(bal1_ow)
+write.table(bal1_ow, file.path(results_dir, "bal1_ow.csv"), col.names = T, row.names = T, append = F, sep = ',')
+
+rm(ps)
 
 # data 2:
-overlap_weights_out2 <- PSweight(
-  ps.formula = ps_formula,
-  data = data2,
-  weight = "overlap"
-)
-
 ps <- glm(ps_formula, data = data2, family = binomial)$fitted.values
-data1$ow <- ifelse(data2$trt == 1, 1 - ps, ps)
+data2$ow <- ifelse(data2$trt == 1, 1 - ps, ps)
 
-bal2 <- SumStat(
-  ps.formula = ps_formula,
-  data = data2,
-  weight = "overlap"
-)
+bal_tab2_ow <- bal.tab(ps_formula,
+                    data = data2,
+                    weights = 'ow',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
 
-write.table(bal2, file.path(results_dir, "overlap2.csv"), col.names = T, row.names = T, append = F, sep = ',')
+bal2_ow <- bal2_ow$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (OW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal2_ow$Variable <- row.names(bal2_ow)
+write.table(bal2_ow, file.path(results_dir, "bal2_ow.csv"), col.names = T, row.names = T, append = F, sep = ',')
+
+rm(ps)
 
 # data 3:
-overlap_weights_out3 <- PSweight(
-  ps.formula = ps_formula,
-  data = data3,
-  weight = "overlap"
-)
-
 ps <- glm(ps_formula, data = data3, family = binomial)$fitted.values
-data3$ow <- ifelse(data1$trt == 1, 1 - ps, ps)
+data3$ow <- ifelse(data3$trt == 1, 1 - ps, ps)
 
-bal3 <- SumStat(
-  ps.formula = ps_formula,
-  data = data3,
-  weight = "overlap"
-)
+bal_tab3_ow <- bal.tab(ps_formula,
+                    data = data3,
+                    weights = 'ow',
+                    binary = 'std',
+                    continuous = 'std',
+                    stats = c('mean.diffs'),
+                    s.d.denom = 'pooled',
+                    un = TRUE,
+                    thresholds = c(m=0.1)
+                    )
 
-write.table(bal3, file.path(results_dir, "overlap3.csv"), col.names = T, row.names = T, append = F, sep = ',')
+bal3_ow <- bal_tab3_ow$Balance %>%
+  dplyr::rename('SMD (Unadjusted)' = Diff.Un,
+                'SMD (OW)' = Diff.Adj,
+                'Balance' = M.Threshold)
+
+bal3_ow$Variable <- row.names(bal3_ow)
+write.table(bal3_ow, file.path(results_dir, "bal3_ow.csv"), col.names = T, row.names = T, append = F, sep = ',')
+
+rm(ps)
 ```
 
 ## SAVE COHORT DATA WITH WEIGHTS
