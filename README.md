@@ -64,7 +64,7 @@ To change the study window, edit `STUDY_START` / `STUDY_END` in `config.R`. To c
 Run after the main analysis has completed. Each scenario reuses the main run's intermediate files and only re-executes from the first step that its parameter affects.
 
 ```bash
-Rscript run_sensitivity.R --scenario sens2_trim    # one scenario (that you specify)
+Rscript run_sensitivity.R --scenario sens3_trim    # one scenario (that you specify)
 Rscript run_sensitivity.R --all                    # every sensitivity analysis, sequentially
 Rscript run_sensitivity.R --list                   # show scenario names + labels
 Rscript run_sensitivity.R --help
@@ -76,15 +76,15 @@ Per-scenario results land in `results/<scenario_name>/` (main's live in `results
 
 | Scenario | Description | First step that reruns |
 |---|---|---|
-| `sens1_ebal` | Entropy balancing weights instead of IPTW | `16-compute-iptw` |
-| `sens2_trim` | 2.5% asymmetric trimming of IPTW weights | `16-compute-iptw` |
-| `sens4_pp_ipcw` | Per-protocol with IPCW in addition to IPTW | `15a-compute-ipcw` |
+| `sens1_iptw` | Inverse probability of treatment weighting (IPTW) instead of overlap weights | `16-compute-ow` |
+| `sens2_ebal` | Entropy balancing weights instead of overlap weights | `16-compute-ow` |
+| `sens3_trim` | 2.5% asymmetric trimming of IPTW weights | `16-compute-ow` |
+| `sens4_pp_ipcw` | Per-protocol with IPCW in addition to overlap weights | `15a-compute-ipcw` |
 | `sens5_metformin` | Restrict to patients with prior metformin use at baseline | `14-clean-data` |
 | `sens6_6mo_coverage` | Require 6 months (instead of 12) of continuous insurance coverage | `05-extract-coverage-indicator` |
 | `sens7_index_followup` | Start follow-up at index date (include early events) | `14-clean-data` |
 | `sens8_6mo_followup` | Require 6 months of follow-up after index, excluding early events | `14-clean-data` |
 | `sens9_age_cap` | Exclude patients aged >85 at baseline | `14-clean-data` |
-| `sens10_ow` | Overlap weights instead of IPTW | `16-compute-iptw` |
 
 To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The analysis scripts that read scenario parameters are `05`, `14`, `16`, `17`, `18`, and `19`.
 

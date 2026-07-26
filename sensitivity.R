@@ -15,12 +15,12 @@
 # per-scenario output folder and then launches `run_all.R --from <start_step>`,
 # so upstream intermediate files are reused without being overwritten.
 # Step indices: 5 = 05-extract-coverage-indicator; 14 = 14-clean-data;
-# 15 = 15a-compute-ipcw; 17 = 16-compute-iptw; 19 = 18-run-survival-analyses.
+# 15 = 15a-compute-ipcw; 17 = 16-compute-ow; 19 = 18-run-survival-analyses.
 # =============================================================================
 
 .main <- list(
   label               = "Main analysis (default settings, no sensitivity override)",
-  weight_method       = "iptw",          # "iptw" or "ebal" or "ow"
+  weight_method       = "ow",            # "ow" or "iptw" or "ebal"
   weight_trimming     = FALSE,           # logical
   trimming_pct        = NULL,            # numeric in (0, 0.5) or NULL
   use_ipcw            = FALSE,           # logical; only affects PP analysis
@@ -34,19 +34,25 @@
 .override <- function(base, ...) modifyList(base, list(...))
 
 SENSITIVITY_SCENARIOS <- list(
-  sens1_ebal = .override(.main,
-    label = "Entropy balancing weights instead of IPTW",
-    start_step = 17L,                    # 16-compute-iptw
+  sens1_iptw = .override(.main,
+    label = "Inverse probability of treatment weighting (IPTW) instead of overlap weights",
+    start_step = 17L,                    # 16-compute-ow
+    weight_method = "iptw"),
+
+  sens2_ebal = .override(.main,
+    label = "Entropy balancing weights instead of overlap weights",
+    start_step = 17L,                    # 16-compute-ow
     weight_method = "ebal"),
 
-  sens2_trim = .override(.main,
+  sens3_trim = .override(.main,
     label = "2.5% asymmetric trimming of IPTW weights",
-    start_step = 17L,                    # 16-compute-iptw
+    start_step = 17L,                    # 16-compute-ow
+    weight_method = "iptw",              # trimming is applied to IPTW, not the overlap-weight main
     weight_trimming = TRUE,
     trimming_pct = 0.025),
 
   sens4_pp_ipcw = .override(.main,
-    label = "Per-protocol with IPCW in addition to IPTW",
+    label = "Per-protocol with IPCW in addition to overlap weights",
     start_step = 15L,                    # 15a-compute-ipcw
     use_ipcw = TRUE),
 
@@ -71,14 +77,9 @@ SENSITIVITY_SCENARIOS <- list(
     extra_followup_days = 90L),
 
   sens9_age_cap = .override(.main,
-    label = "Exclude patients aged >=85 at baseline",
+    label = "Exclude patients aged >85 at baseline",
     start_step = 14L,                    # 14-clean-data
-    max_baseline_age = 84),
-
-  sens10_ow = .override(.main,
-    label = "Overlap weights instead of IPTW",
-    start_step = 17L,                    # 16-compute-iptw
-    weight_method = "ow")
+    max_baseline_age = 85)
 )
 
 # Called by analysis scripts: returns the scenario named by SCENARIO_NAME env

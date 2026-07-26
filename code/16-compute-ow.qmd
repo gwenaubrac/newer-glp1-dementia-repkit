@@ -1,5 +1,5 @@
 ---
-title: "IPTW Model - Novel GLP1s vs other classes"
+title: "Overlap Weights Model - Novel GLP1s vs other classes"
 author: "Gwen Aubrac"
 format: html
 embed-resources: true
@@ -21,7 +21,7 @@ Weights are truncated at the 2.5th and 97.5th percentiles.
 
 Entropy balancing weights are computed at the end and saved as `ebal` (the `weight_method = "ebal"` scenario uses them in the survival analyses).
 
-Overlap weights are computed at the end and saved as `ow` (the `weight_method = "ow"` scenario uses them in the survival analyses).
+Overlap weights are computed at the end and saved as `ow` (the main analysis uses them in the survival analyses).
 
 Note: trimming before or after computing the weights does not matter.
 
@@ -140,7 +140,10 @@ weights_out1$weights <- pmin(pmax(weights_out1$weights, lower), upper)
 summary(weights_out1$weights)
 
 
-weights_out1$treat <- if_else(weights_out1$treat == 1, "Novel GLP1", "SGLT2")
+# Fix the treatment factor level order so the GLP-1 group maps to the same
+# color in every panel (comparator first, GLP-1 second), matching the KM plots.
+weights_out1$treat <- factor(if_else(weights_out1$treat == 1, "GLP-1", "SGLT2"),
+                             levels = c("SGLT2", "GLP-1"))
 
 library(ggplot2)
 
@@ -151,11 +154,16 @@ p <- bal.plot(
   type = "density",
   mirror = FALSE,
   grid = FALSE,
-  legend.labels = c("Novel GLP1", "SGLT2"),
   position = "bottom"
 )
 
-p <- p + 
+# bal.plot orders the treatment groups alphabetically and applies colors/labels
+# positionally, which flips the GLP-1 color between cohorts. Map colors by group
+# NAME instead so GLP-1 is always pink and the comparator green everywhere
+# (matching the KM curves).
+p <- p +
+  scale_fill_manual(values = c("GLP-1" = "#CC79A7", "SGLT2" = "#009E73"),
+                    breaks = c("GLP-1", "SGLT2")) +
   ggtitle("Propensity Score Distributional Balance") +
   xlab("Propensity score") +
   ylab("Density")
@@ -184,41 +192,8 @@ bal1 <- bal_tab1$Balance %>%
 
 bal1$Variable <- row.names(bal1)
 write.table(bal1, file.path(results_dir, "bal1.csv"), col.names = T, row.names = T, append = F, sep = ',')
-
-p <- love.plot(
-  bal_tab1, 
-  binary = "std",
-  thresholds = c(m = .1),
-  title = "Covariate Balance with IPTW",
-  position = "bottom",
-  var.order = "unadjusted",
-  size = 2
-)
-
-p <- p + theme(
-  panel.border = element_blank(),
-  panel.grid.major = element_blank(),
-  panel.grid.minor = element_blank(),
-  axis.line = element_line(color = "black"),
-  
-  axis.text.x = element_text(size = 8),
-  axis.text.y = element_text(size = 8),
-  axis.title.x = element_text(size = 8, face = 'bold'),
-  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
-  
-  legend.position = "bottom", 
-  legend.title = element_text(size = 8, face = 'bold'),
-  legend.text = element_text(size = 8),
-  legend.box.margin = margin(0, 0, 0, 0),
-  legend.margin = margin(0, 0, 0, 0),
-  legend.key.size = unit(0.5, "lines")
-) 
-
-p
-
-ggsave(file.path(results_dir, "loveplot1.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
-dev.off()
-rm(p)
+# Note: bal1.csv is the IPTW (sensitivity) balance. The main-analysis (overlap
+# weight) love plot is produced in the "COMPUTE OVERLAP WEIGHTS" section below.
 
 # repeat for other comparisons:
 # data2: dpp4 (ref) vs novel GLP1s (comp)
@@ -290,7 +265,8 @@ weights_out2$weights <- pmin(pmax(weights_out2$weights, lower), upper)
 summary(weights_out2$weights)
 
 
-weights_out2$treat <- if_else(weights_out2$treat == 1, "Novel GLP1", "DPP4")
+weights_out2$treat <- factor(if_else(weights_out2$treat == 1, "GLP-1", "DPP4"),
+                             levels = c("DPP4", "GLP-1"))
 
 p <- bal.plot(
   weights_out2,
@@ -299,11 +275,12 @@ p <- bal.plot(
   type = "density",
   mirror = FALSE,
   grid = FALSE,
-  legend.labels = c("Novel GLP1", "DPP4"),
   position = "bottom"
 )
 
-p <- p + 
+p <- p +
+  scale_fill_manual(values = c("GLP-1" = "#CC79A7", "DPP4" = "#009E73"),
+                    breaks = c("GLP-1", "DPP4")) +
   ggtitle("Propensity Score Distributional Balance") +
   xlab("Propensity score") +
   ylab("Density")
@@ -332,41 +309,7 @@ bal2 <- bal_tab2$Balance %>%
 
 bal2$Variable <- row.names(bal2)
 write.table(bal2, file.path(results_dir, "bal2.csv"), col.names = T, row.names = T, append = F, sep = ',')
-
-p <- love.plot(
-  bal_tab2, 
-  binary = "std",
-  thresholds = c(m = .1),
-  title = "Covariate Balance with IPTW",
-  position = "bottom",
-  var.order = "unadjusted",
-  size = 2
-)
-
-p <- p + theme(
-  panel.border = element_blank(),
-  panel.grid.major = element_blank(),
-  panel.grid.minor = element_blank(),
-  axis.line = element_line(color = "black"),
-  
-  axis.text.x = element_text(size = 8),
-  axis.text.y = element_text(size = 8),
-  axis.title.x = element_text(size = 8, face = 'bold'),
-  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
-  
-  legend.position = "bottom", 
-  legend.title = element_text(size = 8, face = 'bold'),
-  legend.text = element_text(size = 8),
-  legend.box.margin = margin(0, 0, 0, 0),
-  legend.margin = margin(0, 0, 0, 0),
-  legend.key.size = unit(0.5, "lines")
-) 
-
-p
-
-ggsave(file.path(results_dir, "loveplot2.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
-dev.off()
-rm(p)
+# bal2.csv is the IPTW (sensitivity) balance; overlap-weight love plot below.
 
 #data3: sulfo (ref) vs novel GLP1s (comp)
 data3 <- data %>%
@@ -442,7 +385,8 @@ weights_out3$weights <- pmin(pmax(weights_out3$weights, lower), upper)
 summary(weights_out3$weights)
 
 
-weights_out3$treat <- if_else(weights_out3$treat == 1, "Novel GLP1", "Sulfonylureas")
+weights_out3$treat <- factor(if_else(weights_out3$treat == 1, "GLP-1", "Sulfonylureas"),
+                             levels = c("Sulfonylureas", "GLP-1"))
 
 p <- bal.plot(
   weights_out3,
@@ -451,11 +395,12 @@ p <- bal.plot(
   type = "density",
   mirror = FALSE,
   grid = FALSE,
-  legend.labels = c("Novel GLP1", "Sulfonylureas"),
   position = "bottom"
 )
 
-p <- p + 
+p <- p +
+  scale_fill_manual(values = c("GLP-1" = "#CC79A7", "Sulfonylureas" = "#009E73"),
+                    breaks = c("GLP-1", "Sulfonylureas")) +
   ggtitle("Propensity Score Distributional Balance") +
   xlab("Propensity score") +
   ylab("Density")
@@ -483,47 +428,13 @@ bal3 <- bal_tab3$Balance %>%
 
 bal3$Variable <- row.names(bal3)
 write.table(bal3, file.path(results_dir, "bal3.csv"), col.names = T, row.names = T, append = F, sep = ',')
-
-p <- love.plot(
-  bal_tab3, 
-  binary = "std",
-  thresholds = c(m = .1),
-  title = "Covariate Balance with IPTW",
-  position = "bottom",
-  var.order = "unadjusted",
-  size = 2
-)
-
-p <- p + theme(
-  panel.border = element_blank(),
-  panel.grid.major = element_blank(),
-  panel.grid.minor = element_blank(),
-  axis.line = element_line(color = "black"),
-  
-  axis.text.x = element_text(size = 8),
-  axis.text.y = element_text(size = 8),
-  axis.title.x = element_text(size = 8, face = 'bold'),
-  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
-  
-  legend.position = "bottom", 
-  legend.title = element_text(size = 8, face = 'bold'),
-  legend.text = element_text(size = 8),
-  legend.box.margin = margin(0, 0, 0, 0),
-  legend.margin = margin(0, 0, 0, 0),
-  legend.key.size = unit(0.5, "lines")
-) 
-
-p
-
-ggsave(file.path(results_dir, "loveplot3.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
-dev.off()
-rm(p)
+# bal3.csv is the IPTW (sensitivity) balance; overlap-weight love plot below.
 
 ```
 
 
 ## COMPUTE ENTROPY BALANCING WEIGHTS 
-These are not used for the main analysis but are used for one of the sensitivity analyses (ebal weights instead of IPTW). 
+These are not used for the main analysis but are used for one of the sensitivity analyses (ebal weights instead of overlap weights).
 
 ```{r}
 #| label: compute-ebal-weights
@@ -552,7 +463,7 @@ bal_tab1 <- bal.tab(ps_formula,
 
 bal1 <- bal_tab1$Balance %>%
   dplyr::rename('SMD (Unadjusted)' = Diff.Un,
-                'SMD (IPTW)' = Diff.Adj,
+                'SMD (Entropy Balancing)' = Diff.Adj,
                 'Balance' = M.Threshold)
 
 bal1$Variable <- row.names(bal1)
@@ -590,7 +501,7 @@ bal_tab2 <- bal.tab(ps_formula_2ebal,
 
 bal2 <- bal_tab2$Balance %>%
   dplyr::rename('SMD (Unadjusted)' = Diff.Un,
-                'SMD (IPTW)' = Diff.Adj,
+                'SMD (Entropy Balancing)' = Diff.Adj,
                 'Balance' = M.Threshold)
 
 bal2$Variable <- row.names(bal2)
@@ -643,7 +554,7 @@ bal_tab3 <- bal.tab(ps_formula_3ebal,
 
 bal3 <- bal_tab3$Balance %>%
   dplyr::rename('SMD (Unadjusted)' = Diff.Un,
-                'SMD (IPTW)' = Diff.Adj,
+                'SMD (Entropy Balancing)' = Diff.Adj,
                 'Balance' = M.Threshold)
 
 bal3$Variable <- row.names(bal3)
@@ -664,8 +575,8 @@ bal3 <- rbind(bal3, fn_row)
 write.table(bal3, file.path(results_dir, "ebal3.csv"), col.names = T, row.names = T, append = F, sep = ',')
 ```
 
-## COMPUTE OVERLAP WEIGHTS 
-These are not used for the main analysis but are used for one of the sensitivity analyses (overlap weights instead of IPTW). 
+## COMPUTE OVERLAP WEIGHTS
+These are used for the main analysis (overlap weights).
 
 ```{r}
 #| label: compute-overlap-weights
@@ -692,6 +603,42 @@ bal1_ow <- bal_tab1_ow$Balance %>%
 bal1_ow$Variable <- row.names(bal1_ow)
 write.table(bal1_ow, file.path(results_dir, "bal1_ow.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
+# Main-analysis (overlap weight) covariate balance love plot
+p <- love.plot(
+  bal_tab1_ow,
+  binary = "std",
+  thresholds = c(m = .1),
+  title = "Covariate Balance with Overlap Weights",
+  position = "bottom",
+  var.order = "unadjusted",
+  size = 2
+)
+
+p <- p + theme(
+  panel.border = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.line = element_line(color = "black"),
+
+  axis.text.x = element_text(size = 8),
+  axis.text.y = element_text(size = 8),
+  axis.title.x = element_text(size = 8, face = 'bold'),
+  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+
+  legend.position = "bottom",
+  legend.title = element_text(size = 8, face = 'bold'),
+  legend.text = element_text(size = 8),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.5, "lines")
+)
+
+p
+
+ggsave(file.path(results_dir, "loveplot1.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
+dev.off()
+rm(p)
+
 rm(ps)
 
 # data 2:
@@ -717,6 +664,42 @@ bal2_ow <- bal_tab2_ow$Balance %>%
 bal2_ow$Variable <- row.names(bal2_ow)
 write.table(bal2_ow, file.path(results_dir, "bal2_ow.csv"), col.names = T, row.names = T, append = F, sep = ',')
 
+# Main-analysis (overlap weight) covariate balance love plot
+p <- love.plot(
+  bal_tab2_ow,
+  binary = "std",
+  thresholds = c(m = .1),
+  title = "Covariate Balance with Overlap Weights",
+  position = "bottom",
+  var.order = "unadjusted",
+  size = 2
+)
+
+p <- p + theme(
+  panel.border = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.line = element_line(color = "black"),
+
+  axis.text.x = element_text(size = 8),
+  axis.text.y = element_text(size = 8),
+  axis.title.x = element_text(size = 8, face = 'bold'),
+  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+
+  legend.position = "bottom",
+  legend.title = element_text(size = 8, face = 'bold'),
+  legend.text = element_text(size = 8),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.5, "lines")
+)
+
+p
+
+ggsave(file.path(results_dir, "loveplot2.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
+dev.off()
+rm(p)
+
 rm(ps)
 
 # data 3:
@@ -741,6 +724,42 @@ bal3_ow <- bal_tab3_ow$Balance %>%
 
 bal3_ow$Variable <- row.names(bal3_ow)
 write.table(bal3_ow, file.path(results_dir, "bal3_ow.csv"), col.names = T, row.names = T, append = F, sep = ',')
+
+# Main-analysis (overlap weight) covariate balance love plot
+p <- love.plot(
+  bal_tab3_ow,
+  binary = "std",
+  thresholds = c(m = .1),
+  title = "Covariate Balance with Overlap Weights",
+  position = "bottom",
+  var.order = "unadjusted",
+  size = 2
+)
+
+p <- p + theme(
+  panel.border = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.line = element_line(color = "black"),
+
+  axis.text.x = element_text(size = 8),
+  axis.text.y = element_text(size = 8),
+  axis.title.x = element_text(size = 8, face = 'bold'),
+  plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+
+  legend.position = "bottom",
+  legend.title = element_text(size = 8, face = 'bold'),
+  legend.text = element_text(size = 8),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.5, "lines")
+)
+
+p
+
+ggsave(file.path(results_dir, "loveplot3.png"), plot = p, width = 6, height = 12, units = "in", bg = 'white')
+dev.off()
+rm(p)
 
 rm(ps)
 ```
@@ -790,12 +809,12 @@ saveRDS(data3, file.path(output_dir, "data3_novel.rds")) # novel GLP1s vs sulfo
 #| label: describe-weights
 # save models
 
-sink(file.path(results_dir, "iptw_models_novel.txt"))
+sink(file.path(results_dir, "ow_models_novel.txt"))
 
 print(ps_formula)
 
 cat("=" , rep("=", 70), "\n", sep = "")
-cat("IPTW MODELS\n")
+cat("OW MODELS\n")
 cat("Generated on:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
 cat("=" , rep("=", 70), "\n\n", sep = "")
 
@@ -875,7 +894,7 @@ weights_summary_d3 <- data3 %>%
   mutate(Group = "Semaglutide vs Sulfos")
 
 
-write.csv(weights_summary_d1, file.path(results_dir, "iptw_and_final_weights_d1.csv"), row.names = FALSE)
-write.csv(weights_summary_d2, file.path(results_dir, "iptw_and_final_weights_d2.csv"), row.names = FALSE)
-write.csv(weights_summary_d3, file.path(results_dir, "iptw_and_final_weights_d3.csv"), row.names = FALSE)
+write.csv(weights_summary_d1, file.path(results_dir, "ow_and_final_weights_d1.csv"), row.names = FALSE)
+write.csv(weights_summary_d2, file.path(results_dir, "ow_and_final_weights_d2.csv"), row.names = FALSE)
+write.csv(weights_summary_d3, file.path(results_dir, "ow_and_final_weights_d3.csv"), row.names = FALSE)
 ```

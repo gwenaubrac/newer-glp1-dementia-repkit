@@ -7,7 +7,7 @@ embed-resources: true
 
 ## Overview
 
-Perform ITT survival analyses using Cox proportional hazards model with IPTW weights:
+Perform ITT survival analyses using Cox proportional hazards model with the treatment weights (overlap weights for the main analysis; IPTW/entropy for the weight sensitivity scenarios):
 - For multiple outcomes: dementia outcomes and subtypes (all-cause, lewy body, Alzheimer), negative control outcomes, and sentinel measures of dementia (order for neuroimaging, Parkinson's disease, and MCI). For sentinel measures, patients are additionally censored when they experience all-cause dementia. 
 - In ITT, patients are censored at coverage end, study end, follow-up cap (see below), date of death, or occurrence of the outcome.
 - Follow-up starts after 90 days to reduce the influence of early events. Patients with an early event during this window were excluded from the analysis. A negative follow-up means that the patient left the cohort (due to death, end of coverage, end of study, cap of follow-up, occurrence of the event) during that period of first 90 days. Those patients were excluded and did not contribute to the numerator nor denominator.
@@ -25,7 +25,7 @@ Notes on coding: The analyses are done using a loop to analyze all outcomes for 
 
 **Sensitivity-controlled options** (set by `SCENARIO` - see `sensitivity.R`):
 - `weight_method` (`"iptw"` or `"ebal"` or `"ow"`): which weight column is used for the weighted Cox models. `"iptw"` uses `siptw` for ITT and (depending on `use_ipcw`) `siptw` or `swfinal` for PP. `"ebal"` uses `ebal` for ITT and (depending on `use_ipcw`) `ebal` or `ebalfinal` for PP. `"ow"` uses `ow` for ITT and (depending on `use_ipcw`) `ow` or `owfinal` for PP.
-- `use_ipcw`: if TRUE, the PP analysis combines IPTW (or entropy) with IPCW for switch/discontinuation.
+- `use_ipcw`: if TRUE, the PP analysis combines the treatment weights (overlap/IPTW/entropy) with IPCW for switch/discontinuation.
 - `followup_start` (`"after_grace"` or `"index_date"`): start follow-up `index + 90d` (default) or at `index`.
 - `extra_followup_days` (integer): when 0, keep patients with any positive follow-up (original behavior); when N>0, require `follow_up >= N` days in both ITT and PP cohorts.
 
@@ -50,7 +50,7 @@ source(file.path(project_root, "sensitivity.R"))
 SCENARIO <- get_scenario()
 
 # Resolve weight columns from scenario settings. `siptw`/`swfinal`/`ebal`/`ebalfinal`
-# are columns written by 16-compute-iptw.qmd; see there for their construction.
+# are columns written by 16-compute-ow.qmd; see there for their construction.
 itt_weight_col <- switch(SCENARIO$weight_method,
   "ebal" = "ebal",
   "ow" = "ow",
@@ -278,7 +278,7 @@ for (outcome in c(dementia_outcomes)) {
       cox_ph,
       data.frame(
         cohort = cohort_name,
-        approach = "itt IPTW",
+        approach = "itt weighted",
         outcome = outcome,
         pvalue = coxph_p
       )
@@ -399,12 +399,12 @@ for (outcome in c(dementia_outcomes)) {
     
     # Weighted PP model; weight column depends on SCENARIO$weight_method and
     # SCENARIO$use_ipcw:
-    #   iptw, no ipcw: uses siptw (main)
-    #   iptw, ipcw: uses swfinal (sens4_pp_ipcw)
-    #   ebal, no ipcw: uses ebal (sens1_ebal)
+    #   ow, no ipcw: uses ow (main)
+    #   ow, ipcw: uses owfinal (sens4_pp_ipcw)
+    #   iptw, no ipcw: uses siptw (sens1_iptw)
+    #   iptw, ipcw: uses swfinal
+    #   ebal, no ipcw: uses ebal (sens2_ebal)
     #   ebal, ipcw: uses ebalfinal
-    #   ow, no ipcw: uses ow (sens1_ow)
-    #   ow, ipcw: uses owfinal
     cox_mod_pp <- coxph(Surv(pp_follow_up, pp_event) ~ trt,
                             data = cohort,
                             weights = cohort[[pp_weight_col]],
@@ -417,7 +417,7 @@ for (outcome in c(dementia_outcomes)) {
       cox_ph,
       data.frame(
         cohort = cohort_name,
-        approach = "pp IPTW+IPCW",
+        approach = "pp weighted + IPCW",
         outcome = outcome,
         pvalue = coxph_p
       )
@@ -485,7 +485,7 @@ saveRDS(
 
 ## FALSIFICATION TEST: RISK IN FIRST 90 DAYS
 
-As a falsification test, we can look at the risk of dementia in the first 90 days of follow-up, when a true preventive effect is implausible. If a treatment effect is found, it would suggest confounding as the groups have a different baseline risk of dementia. 
+As a falsification test, we can look at the risk of dementia in the first 90 days of follow-up, when a true preventive effect is implausible. If a treatment effect is found, it would suggest confounding as the groups have a different baseline risk of dementia. We only do this with an ITT approach since we are looking at a short-term effect, which would include the grace period for defining treatment discontinuation. 
 
 ```{r}
 # save results from all models
@@ -522,7 +522,7 @@ cox_ph_fals <- data.frame(
 
 dementia_outcomes <- c(
   # dementia outcomes:
-  "dementia_allcause",
+  "dementia_allcause"
 )
 
 for (outcome in c(dementia_outcomes)) {
@@ -644,10 +644,11 @@ for (outcome in c(dementia_outcomes)) {
     
     
     
-    # Weighted ITT model
+    # Weighted ITT model (weight column chosen from SCENARIO$weight_method;
+    # ow for the main analysis, siptw/ebal for the weight sensitivity scenarios)
     cox_mod_itt <- coxph(Surv(itt_follow_up, itt_event) ~ trt,
                          data = cohort,
-                         weights = "siptw",
+                         weights = cohort[[itt_weight_col]],
                          cluster = PATIENT_ID,
                          robust = TRUE)
 
@@ -657,7 +658,7 @@ for (outcome in c(dementia_outcomes)) {
       cox_ph_fals,
       data.frame(
         cohort = cohort_name,
-        approach = "itt IPTW",
+        approach = "itt weighted",
         outcome = outcome,
         pvalue = coxph_p
       )
@@ -823,7 +824,7 @@ fmt_hr <- function(st, app, out = "dementia_allcause") {
   }, character(1))
 }
 
-#### e-Table 4: Negative Control Outcomes (IPTW-weighted ITT) ####
+#### e-Table 4: Negative Control Outcomes (overlap-weighted ITT) ####
 nco_labels <- c(
   appendicitis = "Appendicitis",
   tooth        = "Traumatic tooth fracture",
@@ -836,6 +837,33 @@ e_tab5 <- do.call(rbind, lapply(names(nco_labels), function(out) {
 }))
 e_tab5 <- as.data.frame(e_tab5, stringsAsFactors = FALSE)
 colnames(e_tab5) <- c("Negative Control Outcome", unname(cohort_cols))
+
+# Footnote: crude (unweighted) number of events for each outcome by treatment
+# group, pulled from followup_times (ITT approach). n_events_trt = GLP-1
+# agonists, n_events_comp = comparator.
+comparator_lab <- c(data1 = "SGLT2", data2 = "DPP4", data3 = "Sulfonylureas")
+crude_events <- function(out) {
+  parts <- vapply(names(cohort_cols), function(coh) {
+    r <- followup_times %>% filter(cohort == coh, outcome == out, approach == "itt")
+    if (nrow(r) == 1)
+      sprintf("GLP-1 %d vs %s %d",
+              as.integer(r$n_events_trt), comparator_lab[[coh]], as.integer(r$n_events_comp))
+    else NA_character_
+  }, character(1))
+  paste(parts[!is.na(parts)], collapse = "; ")
+}
+blank <- rep("", length(cohort_cols))
+footnote_df <- as.data.frame(
+  rbind(
+    c("Crude number of events by treatment group:", blank),
+    do.call(rbind, lapply(names(nco_labels), function(out)
+      c(paste0("  ", nco_labels[[out]], ": ", crude_events(out)), blank)))
+  ),
+  stringsAsFactors = FALSE
+)
+colnames(footnote_df) <- colnames(e_tab5)
+e_tab5 <- rbind(e_tab5, footnote_df)
+
 write_manuscript_xlsx(e_tab5,
                       file.path(manuscript_tab_dir, "e-table-5-nco.xlsx"),
                       sheet = "e-Table 5")
@@ -856,21 +884,21 @@ if (is_main) {
   rows <- list()
   rows[[length(rows) + 1]] <- c("Primary Analysis", "", "", "")
   rows[[length(rows) + 1]] <- c("  Crude", fmt_hr(summary_table, "itt_crude"))
-  rows[[length(rows) + 1]] <- c("  IPTW",  fmt_hr(summary_table, "itt"))
+  rows[[length(rows) + 1]] <- c("  Overlap weights", fmt_hr(summary_table, "itt"))
   rows[[length(rows) + 1]] <- c("Sensitivity analyses", "", "", "")
 
-  # Order of sensitivity rows in manuscript Table 2. 
+  # Order of sensitivity rows in manuscript Table 2.
   sens_order <- c(
-    "sens1_ebal",
-    "sens2_trim",
-    "pp_iptw_only",
+    "sens1_iptw",
+    "sens2_ebal",
+    "sens3_trim",
+    "pp_ow_only",
     "sens4_pp_ipcw",
     "sens5_metformin",
     "sens6_6mo_coverage",
     "sens7_index_followup",
     "sens8_6mo_followup",
-    "sens9_age_cap",
-    "sens10_ow",
+    "sens9_age_cap"
   )
   sens_order <- c(sens_order,
                   setdiff(names(SENSITIVITY_SCENARIOS), sens_order))
@@ -878,8 +906,8 @@ if (is_main) {
   # Sensitivity scenarios save their rds to results/<scenario>/
   scenarios_root <- dirname(results_dir)
   for (nm in sens_order) {
-    if (identical(nm, "pp_iptw_only")) {
-      rows[[length(rows) + 1]] <- c("  Per-protocol with IPTW only",
+    if (identical(nm, "pp_ow_only")) {
+      rows[[length(rows) + 1]] <- c("  Per-protocol with overlap weights only",
                                     fmt_hr(summary_table, "pp"))
       next
     }

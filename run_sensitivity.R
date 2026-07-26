@@ -10,7 +10,7 @@
 #
 # Usage:
 #   Rscript run_sensitivity.R --scenario main
-#   Rscript run_sensitivity.R --scenario sens2_trim
+#   Rscript run_sensitivity.R --scenario sens3_trim
 #   Rscript run_sensitivity.R --all
 #   Rscript run_sensitivity.R --list
 #   Rscript run_sensitivity.R --help
@@ -60,7 +60,7 @@ while (i <= length(args)) {
   switch(args[i],
     "--scenario" = {
       i <- i + 1L
-      if (i > length(args)) die("--scenario requires a name", "e.g. --scenario sens2_trim")
+      if (i > length(args)) die("--scenario requires a name", "e.g. --scenario sens3_trim")
       opts$scenario <- args[i]
     },
     "--all"  = { opts$all  <- TRUE },

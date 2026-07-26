@@ -7,7 +7,7 @@ embed-resources: true
 
 ## Overview
 
-Create a table of baseline characteristics before weighting. Check the standardized mean differences (SMD) before weighting, after IPTW weighting, and after IPCW + IPCW weighting. 
+Create a table of baseline characteristics before weighting. Check the standardized mean differences (SMD) before weighting, after overlap weighting (the main analysis), and after IPCW + IPCW weighting.
 
 ```{r}
 #| label: describe-sample
@@ -157,7 +157,7 @@ cov_list <- c(
   "falls",
   "fractures",
   "hepa",
-  "hf_hosp"
+  "hf_hosp",
   "hypoglyc",
   "hyper",
   "ihd",
@@ -208,10 +208,10 @@ compute_smd <- function(var, data, weights = NULL) {
 }
 
 crude_smd <- sapply(cov_list, compute_smd, data = data1)
-iptw_smd <- sapply(cov_list, compute_smd, data = data1, weights = data1$iptw)
+ow_smd <- sapply(cov_list, compute_smd, data = data1, weights = data1$ow)
 
 crude_smd_lookup <- setNames(abs(crude_smd), cov_list)
-iptw_smd_lookup <- setNames(abs(iptw_smd),  cov_list)
+ow_smd_lookup <- setNames(abs(ow_smd),  cov_list)
 
 tab1_data1 <- table1(
   tab1_formula_new,
@@ -221,7 +221,7 @@ tab1_data1 <- table1(
   render.categorical = render_binary,
   extra.col = list(
     "Crude SMD" = function(x, vname, ...) crude_smd_lookup[vname],
-    "IPTW SMD" = function(x, vname, ...) iptw_smd_lookup[vname]
+    "Overlap Weight SMD" = function(x, vname, ...) ow_smd_lookup[vname]
   )
 )
 
@@ -243,7 +243,7 @@ smd_output <- tidy_smd(
   data1, 
   cov_list,
   .group = trt, 
-  .wts = c(iptw, swfinal)
+  .wts = c(ow, owfinal)
 )
 
 print(smd_output, n = 150)
@@ -256,13 +256,13 @@ cat("=", rep("=", 70), "\n", sep = "")
 sink()
 
 # novel GLP1 vs dpp4
-rm(crude_smd, iptw_smd, crude_smd_lookup, iptw_smd_lookup)
+rm(crude_smd, ow_smd, crude_smd_lookup, ow_smd_lookup)
 gc()
 crude_smd  <- sapply(cov_list, compute_smd, data = data2)
-iptw_smd   <- sapply(cov_list, compute_smd, data = data2, weights = data2$iptw)
+ow_smd   <- sapply(cov_list, compute_smd, data = data2, weights = data2$ow)
 
 crude_smd_lookup <- setNames(abs(crude_smd), cov_list)
-iptw_smd_lookup  <- setNames(abs(iptw_smd),  cov_list)
+ow_smd_lookup  <- setNames(abs(ow_smd),  cov_list)
 
 tab1_data2 <- table1(
   tab1_formula_new,
@@ -272,7 +272,7 @@ tab1_data2 <- table1(
   render.categorical = render_binary,
   extra.col = list(
     "Crude SMD"  = function(x, vname, ...) crude_smd_lookup[vname],
-    "IPTW SMD"   = function(x, vname, ...) iptw_smd_lookup[vname]
+    "Overlap Weight SMD"   = function(x, vname, ...) ow_smd_lookup[vname]
   )
 )
 
@@ -292,7 +292,7 @@ smd_output <- tidy_smd(
   data2, 
   cov_list,
   .group = trt, 
-  .wts = c(iptw, swfinal)
+  .wts = c(ow, owfinal)
 )
 
 print(smd_output, n = 150)
@@ -306,13 +306,13 @@ sink()
 
 
 # novel GLP1s vs sulfos
-rm(crude_smd, iptw_smd, crude_smd_lookup, iptw_smd_lookup)
+rm(crude_smd, ow_smd, crude_smd_lookup, ow_smd_lookup)
 gc()
 crude_smd  <- sapply(cov_list, compute_smd, data = data3)
-iptw_smd   <- sapply(cov_list, compute_smd, data = data3, weights = data3$iptw)
+ow_smd   <- sapply(cov_list, compute_smd, data = data3, weights = data3$ow)
 
 crude_smd_lookup <- setNames(abs(crude_smd), cov_list)
-iptw_smd_lookup  <- setNames(abs(iptw_smd),  cov_list)
+ow_smd_lookup  <- setNames(abs(ow_smd),  cov_list)
 
 tab1_data3 <- table1(
   tab1_formula_new,
@@ -322,7 +322,7 @@ tab1_data3 <- table1(
   render.categorical = render_binary,
   extra.col = list(
     "Crude SMD"  = function(x, vname, ...) crude_smd_lookup[vname],
-    "IPTW SMD"   = function(x, vname, ...) iptw_smd_lookup[vname]
+    "Overlap Weight SMD"   = function(x, vname, ...) ow_smd_lookup[vname]
   )
 )
 
@@ -341,7 +341,7 @@ smd_output <- tidy_smd(
   data3, 
   cov_list,
   .group = trt, 
-  .wts = c(iptw, swfinal)
+  .wts = c(ow, owfinal)
 )
 
 print(smd_output, n = 150)
@@ -362,23 +362,23 @@ sink()
 #### SAVE FINAL TABLE 1 ####
 
 tab1_data1_new <- as.data.frame(tab1_data1)
-colnames(tab1_data1_new) <- c("var", "sglt2", "glp1", "total", "smd", "smd_iptw")
+colnames(tab1_data1_new) <- c("var", "sglt2", "glp1", "total", "smd", "smd_ow")
 
 tab1_data2_new <- as.data.frame(tab1_data2)
-colnames(tab1_data2_new) <- c("var", "dpp4", "glp1", "total", "smd", "smd_iptw")
+colnames(tab1_data2_new) <- c("var", "dpp4", "glp1", "total", "smd", "smd_ow")
 
 tab1_data3_new <- as.data.frame(tab1_data3)
-colnames(tab1_data3_new) <- c("var", "sulfo", "glp1", "total", "smd", "smd_iptw")
+colnames(tab1_data3_new) <- c("var", "sulfo", "glp1", "total", "smd", "smd_ow")
 
 final_tab1 <- data.frame(
   var = tab1_data1_new$var,
   glp1 = tab1_data1_new$glp1, 
   sglt2 = tab1_data1_new$sglt2,
-  smd_sglt2 = tab1_data1_new$smd_iptw,
+  smd_sglt2 = tab1_data1_new$smd_ow,
   dpp4 = tab1_data2_new$dpp4,
-  smd_dpp4 = tab1_data2_new$smd_iptw,
+  smd_dpp4 = tab1_data2_new$smd_ow,
   sulfo = tab1_data3_new$sulfo,
-  smd_sulfo = tab1_data3_new$smd_iptw
+  smd_sulfo = tab1_data3_new$smd_ow
 )
 
 write.csv(
@@ -397,7 +397,7 @@ manuscript_tab1 <- final_tab1[, c("var", "glp1",
                                   "sglt2", "smd_sglt2",
                                   "dpp4", "smd_dpp4",
                                   "sulfo", "smd_sulfo")]
-smd_cols <- c("smd_sglt2", "smd_dpp4", "smd_sulfo")  # IPTW SMD value columns
+smd_cols <- c("smd_sglt2", "smd_dpp4", "smd_sulfo")  # overlap weight SMD value columns
 val_cols <- c("glp1", "sglt2", "dpp4", "sulfo")      # N (%) / mean (SD) cells
 
 # Formatting to table1: indentation under category levels
@@ -466,12 +466,12 @@ age_rows <- grepl("^[[:space:]]*Age \\(years\\)\\s*$", manuscript_tab1$var)
 manuscript_tab1$var[age_rows] <- sub("(Age \\(years\\))", "\\1 b",
                                      manuscript_tab1$var[age_rows])
 
-# Footnote for "IPTW SMD" header (footnote a).
+# Footnote for "Overlap Weight SMD" header (footnote a).
 colnames(manuscript_tab1) <- c("Variable",
                                 "GLP-1 Agonists",
-                                "SGLT2 Inhibitors", "IPTW SMD a",
-                                "DPP4 Inhibitors",  "IPTW SMD a",
-                                "Sulfonylureas",    "IPTW SMD a")
+                                "SGLT2 Inhibitors", "Overlap Weight SMD a",
+                                "DPP4 Inhibitors",  "Overlap Weight SMD a",
+                                "Sulfonylureas",    "Overlap Weight SMD a")
 
 # Append footnote rows at the bottom of the table.
 footnotes <- as.data.frame(
@@ -493,7 +493,7 @@ xlsx_tab <- manuscript_tab1
 xlsx_tab$Variable <- trimws(xlsx_tab$Variable)
 
 indent_for <- c(info = 0, section = 0, var = 1, sub = 2, footnote = 0)
-smd_idx    <- which(colnames(xlsx_tab) == "IPTW SMD a")
+smd_idx    <- which(colnames(xlsx_tab) == "Overlap Weight SMD a")
 nr <- nrow(xlsx_tab); nc <- ncol(xlsx_tab)
 
 wb <- createWorkbook()
@@ -545,10 +545,10 @@ library(dplyr)
 library(tidyr)
 
 weight_labels <- c(
-  siptw = "  Stabilized IPTW (ITT analysis)",
+  ow = "  Overlap weight (ITT analysis)",
   ipcw_switch = "  IPCW for switch",
   ipcw_disc = "  IPCW for discontinuation",
-  swfinal = "  Combined weight (PP analysis)"
+  owfinal = "  Combined weight (PP analysis)"
 )
 
 summarize_weights <- function(df) {
@@ -595,9 +595,14 @@ e_tab4 <- bind_rows(
 
 e_tab4
 
-write.csv(
-  e_tab4,
-  file.path(manuscript_tab_dir, "etable-4-weights.csv"),
-  row.names = FALSE
-)
+# Manuscript e-table 4: only written on the main run. manuscript_tab_dir is
+# defined only inside the is_main block above, and sensitivity scenarios must
+# not overwrite main's manuscript copy, so guard the write here too.
+if (is_main) {
+  write.csv(
+    e_tab4,
+    file.path(manuscript_tab_dir, "e-table-4-weights.csv"),
+    row.names = FALSE
+  )
+}
 ```

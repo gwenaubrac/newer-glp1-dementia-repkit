@@ -35,7 +35,7 @@ PIPELINE <- list(
   c("14-clean-data.qmd",                    "QMD"),
   c("15a-compute-ipcw.qmd",                 "QMD"),
   c("15b-describe-ipcw.R",                  "R"),
-  c("16-compute-iptw.qmd",                  "QMD"),
+  c("16-compute-ow.qmd",                    "QMD"),
   c("17-describe-study-sample.qmd",               "QMD"),
   c("18-run-survival-analyses.qmd",         "QMD"),
   c("19-create-plots.qmd",                    "QMD")

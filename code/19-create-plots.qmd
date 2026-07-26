@@ -145,7 +145,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
   #### CUMULATIVE INCIDENCE CURVES ####
 
   # ITT plot
-  km_fit <- survfit(Surv(itt_follow_up, itt_event) ~ trt, data = cohort, weights = siptw)
+  km_fit <- survfit(Surv(itt_follow_up, itt_event) ~ trt, data = cohort, weights = ow)
 
   p <- ggsurvplot(km_fit,
                   data = cohort,
@@ -156,7 +156,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
                   xlab = "Time (days)",
                   ylab = "Cumulative Incidence",
                   title = "Cumulative Incidence of All-Cause Dementia",
-                  subtitle = "Intention-to-Treat Approach with IPTW", # adjust
+                  subtitle = "Intention-to-Treat Approach with Overlap Weights", # adjust
                   legend.title = "Treatment",
                   legend.labs = c(ref, index),
                   palette = c("#009E73", "#CC79A7"),
@@ -186,7 +186,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
 
 
   # PP plot
-  km_fit <- survfit(Surv(pp_follow_up, pp_event) ~ trt, data = cohort, weights = swfinal)
+  km_fit <- survfit(Surv(pp_follow_up, pp_event) ~ trt, data = cohort, weights = owfinal)
 
   p <- ggsurvplot(km_fit,
                   data = cohort,
@@ -197,7 +197,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
                   xlab = "Time (days)",
                   ylab = "Cumulative Incidence",
                   title = "Cumulative Incidence of All-Cause Dementia",
-                  subtitle = "Per-Protocol Approach with IPTW + IPCW", # adjust
+                  subtitle = "Per-Protocol Approach with Overlap Weights + IPCW", # adjust
                   legend.title = "Treatment",
                   legend.labs = c(ref, index),
                   palette = c("#009E73", "#CC79A7"),
@@ -215,7 +215,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
 
 rm(cohort, cohort_name, ref, index)
 
-# Manuscript figure 3: IPTW-weighted ITT KM curves, 3 panels (curve + number-
+# Manuscript figure 3: overlap-weighted ITT KM curves, 3 panels (curve + number-
 # at-risk table per panel) stacked vertically. ggsurvplot objects don't compose
 # correctly via patchwork (you'd get a curve-only / table-only mash that
 # renders empty when saved), so we use survminer::arrange_ggsurvplots and
