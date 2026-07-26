@@ -377,15 +377,15 @@ program define get_codes_3
     * keep only patients in cohort
     merge m:1 PATIENT_ID using final_novel, keep(match) nogen keepusing(PATIENT_ID index_date lookback_date)
     
-    keep PATIENT_ID CLAIM_DATE index_date lookback_date
-    sort PATIENT_ID CLAIM_DATE
+    keep PATIENT_ID ADMISSION_DATE index_date lookback_date
+    sort PATIENT_ID ADMISSION_DATE
     duplicates drop
     
     local n_total = _N
     display "Total `name' claims: `n_total'"
     
     * keep only claims that occurred during lookback period
-    keep if CLAIM_DATE <= index_date & CLAIM_DATE >= lookback_date
+    keep if ADMISSION_DATE <= index_date & ADMISSION_DATE >= lookback_date
     gen `name' = 1
     keep PATIENT_ID `name'
     duplicates drop PATIENT_ID, force

@@ -709,7 +709,7 @@ bal_tab2_ow <- bal.tab(ps_formula,
                     thresholds = c(m=0.1)
                     )
 
-bal2_ow <- bal2_ow$Balance %>%
+bal2_ow <- bal_tab2_ow$Balance %>%
   dplyr::rename('SMD (Unadjusted)' = Diff.Un,
                 'SMD (OW)' = Diff.Adj,
                 'Balance' = M.Threshold)

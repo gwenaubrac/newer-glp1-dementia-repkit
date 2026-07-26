@@ -78,7 +78,7 @@ SENSITIVITY_SCENARIOS <- list(
   sens10_ow = .override(.main,
     label = "Overlap weights instead of IPTW",
     start_step = 17L,                    # 16-compute-iptw
-    weight_method = "ow"),
+    weight_method = "ow")
 )
 
 # Called by analysis scripts: returns the scenario named by SCENARIO_NAME env
