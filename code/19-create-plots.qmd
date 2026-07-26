@@ -438,8 +438,11 @@ if (is_main) {
 # Build figure-1-flowchart from merge_counts.txt (written by 06) 
 # and eligibility_steps_by_cohort.csv (written by 07 and updated by 14)
 # Only built on the main run; sensitivity scenarios skip it so they don't
-# overwrite main's manuscript copy.
-if (!is_main) knitr::knit_exit()
+# overwrite main's manuscript copy. knitr::knit_exit() is unreliable under
+# Quarto (it does not always halt the render), so gate the whole block with an
+# explicit is_main check instead - the eligibility CSV it reads only exists for
+# the main run, so a sensitivity run would otherwise crash here.
+if (is_main) {
 
 fmt_n <- function(x) format(as.integer(x), big.mark = ",", scientific = FALSE, trim = TRUE)
 
@@ -638,4 +641,5 @@ ggsave(file.path(manuscript_fig_dir, "figure-1-flowchart.pdf"),
 ggsave(file.path(manuscript_fig_dir, "figure-1-flowchart.tiff"),
        flowchart_plot, width = 13, height = 14, dpi = 300,
        device = "tiff", compression = "lzw")
+} # end if (is_main) - figure 1 is a main-only manuscript figure
 ```

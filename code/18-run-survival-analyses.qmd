@@ -769,7 +769,9 @@ write.csv(
 #| label: manuscript-nco-and-results
 # Manuscript tables are written only on the main run; sensitivity scenarios
 # would otherwise overwrite main's manuscript copies in the shared folder.
-if (!is_main) knitr::knit_exit()
+# knitr::knit_exit() is unreliable under Quarto (it does not always halt the
+# render), so each manuscript write below is gated with an explicit is_main
+# check instead - matching the Table 2 chunk that follows.
 
 manuscript_tab_dir <- file.path(project_root, "manuscript", "tables")
 dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
@@ -864,9 +866,11 @@ footnote_df <- as.data.frame(
 colnames(footnote_df) <- colnames(e_tab5)
 e_tab5 <- rbind(e_tab5, footnote_df)
 
-write_manuscript_xlsx(e_tab5,
-                      file.path(manuscript_tab_dir, "e-table-5-nco.xlsx"),
-                      sheet = "e-Table 5")
+if (is_main) {
+  write_manuscript_xlsx(e_tab5,
+                        file.path(manuscript_tab_dir, "e-table-5-nco.xlsx"),
+                        sheet = "e-Table 5")
+}
 ```
 
 ```{r}
