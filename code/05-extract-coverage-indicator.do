@@ -7,20 +7,12 @@ include "_globals.do"
 * ============================================================================
 * Sensitivity parameter - coverage lookback period
 * ============================================================================
-* COVERAGE_MONTHS is set by run_sensitivity.R; defaults to 12 (main analysis).
-
-
-local cov_months = ${COVERAGE_MONTHS}
-if `cov_months' == 12 {
-    local lookback_days = 365
-}
-else if `cov_months' == 6 {
-    local lookback_days = 182
-}
-else {
-    display as error "COVERAGE_MONTHS must be 6 or 12 (got: `cov_months')"
-    exit 198
-}
+* COVERAGE_MONTHS is set by run_sensitivity.R and defaults to 12 (main
+* analysis). $LOOKBACK_DAYS is derived from it in config.R (365 for 12 months,
+* 182 for 6) so that this script, 06 and 09 all use the same window; config.R
+* rejects any other value. Do not hardcode the number here.
+local lookback_days = $LOOKBACK_DAYS
+display as text "coverage/covariate lookback: `lookback_days' days (${COVERAGE_MONTHS} months)"
 
 * ============================================================================
 * Novel GLP1s comparison
@@ -32,10 +24,27 @@ clear
 * step 03, which sensitivity scenarios don't re-run) use $MAIN_OUTPUT_DIR.
 cd "$OUTPUT_DIR"
 
-odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_ENROLLMENT_LATEST") dsn("$SNOWFLAKE_DSN")
+* ============================================================================
+* Load enrollment ONCE, filtered server-side
+* ============================================================================
+* PATIENT_ENROLLMENT_LATEST holds every enrollment segment for every patient in
+* the database. The dual-coverage filter and the column selection run in SQL,
+* so rows that would be dropped never reach Stata.
+*
+* The two blocks below (lookback coverage, post-index coverage end) need the
+* exact same rows, so this loads them once into a tempfile that both blocks
+* read, instead of running the identical query twice.
+* NOTE: this makes it mandatory to run the do-file in one go - the tempfile does
+* not survive between piecemeal runs.
 
-keep if MEDICAL_COVERAGE_INDICATOR==1 & PHARMACY_COVERAGE_INDICATOR==1
+odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_ENROLLMENT_LATEST WHERE MEDICAL_COVERAGE_INDICATOR = 1 AND PHARMACY_COVERAGE_INDICATOR = 1") dsn("$SNOWFLAKE_DSN")
+compress
+display as text "enrollment rows loaded: " _N
 
+tempfile enroll
+save "`enroll'"
+
+* ---- cov_lookback_novel: continuous coverage across the lookback window -----
 sort PATIENT_ID ELIGIBILITY_START_DATE
 merge m:1 PATIENT_ID using "$MAIN_OUTPUT_DIR/index_novel_comparisons" ,keep(match) nogen
 
@@ -71,11 +80,9 @@ duplicates drop
 save "cov_lookback_novel", replace
 
 
-clear
-odbc load, exec("SELECT PATIENT_ID, ELIGIBILITY_START_DATE, ELIGIBILITY_END_DATE, MEDICAL_COVERAGE_INDICATOR, PHARMACY_COVERAGE_INDICATOR FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.PATIENT_ENROLLMENT_LATEST") 
-
-keep if MEDICAL_COVERAGE_INDICATOR==1
-keep if PHARMACY_COVERAGE_INDICATOR==1
+* ---- cov_end_novel: first date continuous coverage ends after index ---------
+* Same rows as above, read from the tempfile instead of re-querying Snowflake.
+use "`enroll'", clear
 
 sort PATIENT_ID ELIGIBILITY_START_DATE
 merge m:1 PATIENT_ID using "$MAIN_OUTPUT_DIR/index_novel_comparisons"

@@ -7,7 +7,7 @@ clear
 cd "$OUTPUT_DIR"
 
 use final_novel, clear
-gen lookback_date = index_date - 365
+gen lookback_date = index_date - $LOOKBACK_DAYS
 save final_novel, replace
 
 clear

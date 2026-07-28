@@ -115,6 +115,19 @@ Sys.setenv(STUDY_START      = STUDY_START,
 # Written as raw bytes - guarantees no UTF-8 BOM (Stata reports BOMs as
 # "ï»¿ is not a valid command name r(199)").
 write_globals_do <- function() {
+  # The lookback window is derived from COVERAGE_MONTHS here, once, so that
+  # every .do file shares it via $LOOKBACK_DAYS. Scenarios that shorten the
+  # required continuous-coverage window (sens6) must shorten the covariate and
+  # exclusion lookbacks to match - ascertaining 12 months of history on
+  # patients only required to have 6 months of coverage would mean reading
+  # claims from periods when they were not enrolled.
+  cov_months <- Sys.getenv("COVERAGE_MONTHS", unset = "12")
+  lookback_days <- switch(cov_months,
+    "12" = "365",
+    "6"  = "182",
+    stop(sprintf("COVERAGE_MONTHS must be 6 or 12 (got: '%s')", cov_months),
+         call. = FALSE))
+
   globals <- list(
     PROJECT_ROOT     = PROJECT_ROOT,
     DATA_DIR         = DATA_DIR,
@@ -123,7 +136,8 @@ write_globals_do <- function() {
     RESULTS_DIR      = RESULTS_DIR,
     STUDY_START      = STUDY_START,
     STUDY_END        = STUDY_END,
-    COVERAGE_MONTHS  = Sys.getenv("COVERAGE_MONTHS", unset = "12"),
+    COVERAGE_MONTHS  = cov_months,
+    LOOKBACK_DAYS    = lookback_days,
     SCENARIO_NAME    = Sys.getenv("SCENARIO_NAME",   unset = "main"),
     SNOWFLAKE_DSN    = SNOWFLAKE_DSN,
     SNOWFLAKE_CLIENT = SNOWFLAKE_CLIENT,

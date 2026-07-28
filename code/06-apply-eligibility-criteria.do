@@ -10,7 +10,7 @@ use "$MAIN_OUTPUT_DIR/index_novel_comparisons.dta", clear
 count
 local before_merge = r(N)
 merge m:1 PATIENT_ID using cov_lookback_novel, keep(match) nogen
-gen lookback_date = index_date - 365
+gen lookback_date = index_date - $LOOKBACK_DAYS
 count
 local after_merge = r(N)
 save continuous_novel, replace
@@ -44,44 +44,25 @@ forvalues i = 1/4 {
 * Diabetes in lookback
 * ============================================================================
 
+* The four chunks below exist to keep the m:1 merge small enough for memory.
+* The QUERY, however, is identical for all four, so it runs once here and the
+* result is reused - previously this ran the same full-table unpivot scan four
+* times over.
 clear
 odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
-merge m:1 PATIENT_ID using continuous_novel1, keep(match) nogen
-keep if CLAIM_DATE <= index_date
-keep if CLAIM_DATE >= index_date-365
-keep PATIENT_ID
-gen lookback_diabetes=1
-save lookback_diabetes_novel1, replace
+compress
+tempfile e11
+save "`e11'"
 
-
-clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
-merge m:1 PATIENT_ID using continuous_novel2, keep(match) nogen
-keep if CLAIM_DATE <= index_date
-keep if CLAIM_DATE >= index_date-365
-keep PATIENT_ID
-gen lookback_diabetes=1
-save lookback_diabetes_novel2, replace
-
-
-clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
-merge m:1 PATIENT_ID using continuous_novel3, keep(match) nogen
-keep if CLAIM_DATE <= index_date
-keep if CLAIM_DATE >= index_date-365
-keep PATIENT_ID
-gen lookback_diabetes=1
-save lookback_diabetes_novel3, replace
-
-
-clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'E11%');") dsn("$SNOWFLAKE_DSN")
-merge m:1 PATIENT_ID using continuous_novel4, keep(match) nogen
-keep if CLAIM_DATE <= index_date
-keep if CLAIM_DATE >= index_date-365
-keep PATIENT_ID
-gen lookback_diabetes=1
-save lookback_diabetes_novel4, replace
+forvalues i = 1/4 {
+    use "`e11'", clear
+    merge m:1 PATIENT_ID using continuous_novel`i', keep(match) nogen
+    keep if CLAIM_DATE <= index_date
+    keep if CLAIM_DATE >= index_date-$LOOKBACK_DAYS
+    keep PATIENT_ID
+    gen lookback_diabetes=1
+    save lookback_diabetes_novel`i', replace
+}
 
 clear
 use lookback_diabetes_novel1, clear
@@ -124,7 +105,7 @@ clear
 odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'F01%' OR code LIKE 'F02%' OR code LIKE 'F03%' OR code LIKE 'G30%' OR code LIKE 'F1027%' OR code LIKE 'F1097%' OR code LIKE 'G310%' OR code LIKE 'G3183%');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if CLAIM_DATE <= index_date
-keep if CLAIM_DATE >= index_date-365
+keep if CLAIM_DATE >= index_date-$LOOKBACK_DAYS
 keep PATIENT_ID
 gen lookback_dementia=1
 duplicates drop

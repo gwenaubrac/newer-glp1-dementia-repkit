@@ -38,8 +38,13 @@ if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file di
 output_dir      <- Sys.getenv("OUTPUT_DIR",      unset = file.path(project_root, "output"))
 main_output_dir <- Sys.getenv("MAIN_OUTPUT_DIR", unset = output_dir)
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results", "main"))
-is_main <- !nzchar(Sys.getenv("SCENARIO_NAME")) ||
-  identical(Sys.getenv("SCENARIO_NAME"), "main")
+# "main" requires BOTH signals to agree: SCENARIO_NAME (only inherited, so it can
+# fail to reach the Quarto render and read as empty here) and RESULTS_DIR (set
+# explicitly by run_all.R, reliable). Fails safe - if either signals a sensitivity
+# scenario, we must NOT overwrite main's manuscript outputs.
+is_main <- (!nzchar(Sys.getenv("SCENARIO_NAME")) ||
+            identical(Sys.getenv("SCENARIO_NAME"), "main")) &&
+           identical(basename(results_dir), "main")
 out_path <- function(name) {
   p <- normalizePath(file.path(output_dir, name), winslash = "/", mustWork = FALSE)
   if (file.exists(p)) return(p)
@@ -880,7 +885,10 @@ if (is_main) {
 # Table 2 aggregates the main analysis with every sensitivity scenario run
 # so far and is only built when running main analysis
 scenario_name <- Sys.getenv("SCENARIO_NAME", unset = "main")
-is_main <- !nzchar(scenario_name) || identical(scenario_name, "main")
+# See note at top of file: require RESULTS_DIR to be main too, so a sensitivity
+# render (where SCENARIO_NAME may not have propagated) never rebuilds Table 2.
+is_main <- (!nzchar(scenario_name) || identical(scenario_name, "main")) &&
+           identical(basename(results_dir), "main")
 
 if (is_main) {
   source(file.path(project_root, "sensitivity.R"))
