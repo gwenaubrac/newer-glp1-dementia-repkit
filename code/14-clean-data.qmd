@@ -238,6 +238,15 @@ if (is.finite(SCENARIO$max_baseline_age)) {
   data %<>% filter(age <= SCENARIO$max_baseline_age)
 }
 
+# Exclude other GLP-1 agents (dulaglutide, liraglutide) that are not part of
+# the semaglutide/tirzepatide vs. comparator-class analysis. These patients
+# are captured by index_class == "GLP1" but have index_glp1 values outside
+# our two agents of interest.
+n_before_other_glp1 <- nrow(data)
+data %<>%
+  filter(index_class != "GLP1" | index_glp1 %in% c("semaglutide", "tirzepatide"))
+n_after_other_glp1 <- nrow(data)
+
 saveRDS(cov_list, file.path(output_dir, "cov_list_novel.rds"))
 saveRDS(data, file.path(output_dir, "clean_novel.rds"))
 
@@ -250,14 +259,16 @@ if (file.exists(flowchart_path)) {
 
   r_side_steps <- c(
     "After exclude unreadable BMI/Z68 value", "After exclude missing region",
+    "After exclude other GLP-1 agents",
     "Subgroup novel semaglutide", "Subgroup novel tirzepatide",
     "Subgroup novel SGLT2", "Subgroup novel DPP4",
     "Subgroup novel sulfonylureas"
   )
   flow <- flow[!flow$step %in% r_side_steps, , drop = FALSE]
 
-  seq_steps <- c("After exclude unreadable BMI/Z68 value", "After exclude missing region")
-  seq_counts <- c(n_after_bmi, n_after_region)
+  seq_steps <- c("After exclude unreadable BMI/Z68 value", "After exclude missing region",
+                 "After exclude other GLP-1 agents")
+  seq_counts <- c(n_after_bmi, n_after_region, n_after_other_glp1)
   running <- tail(flow$novel, 1)
   excluded_seq <- integer(length(seq_counts))
   for (i in seq_along(seq_counts)) {

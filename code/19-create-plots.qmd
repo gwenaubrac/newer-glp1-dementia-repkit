@@ -469,7 +469,8 @@ flow$step <- as.character(flow$step)
 
 is_after <- grepl("^After exclude", flow$step)
 is_analytic <- flow$step %in% c("After exclude unreadable BMI/Z68 value",
-                                "After exclude missing region")
+                                "After exclude missing region",
+                                "After exclude other GLP-1 agents")
 is_subgroup <- grepl("^Subgroup novel", flow$step)
 study_pop <- flow[is_after & !is_analytic, , drop = FALSE]
 analytic  <- flow[is_analytic, , drop = FALSE]
