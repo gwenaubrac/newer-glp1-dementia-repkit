@@ -74,10 +74,10 @@ for (cohort_name in c("data1", "data2", "data3")) {
   cohort <- get(cohort_name)
 
   if (cohort_name == "data1") {
-    ref <- "SGLT2"
+    ref <- "SGLT2 Inhibitors"
     index <- "Semaglutide/Tirzepatide"
   } else if (cohort_name == "data2") {
-    ref <- "DPP4"
+    ref <- "DPP4 Inhibitors"
     index <- "Semaglutide/Tirzepatide"
   } else if (cohort_name == "data3") {
     ref <- "Sulfonylureas"
@@ -267,9 +267,9 @@ forest_data <- summary_table %>%
   filter(outcome == "dementia_allcause" & (approach == "itt")) %>%
   mutate(
     Comparator = case_when(
-      cohort == "data1" & approach == "itt" ~ "a) SGLT2",
-      cohort == "data2" & approach == "itt" ~ "b) DPP4",
-      cohort == "data3" & approach == "itt" ~ "c) SU"
+      cohort == "data1" & approach == "itt" ~ "a) SGLT2 Inhibitors",
+      cohort == "data2" & approach == "itt" ~ "b) DPP4 Inhibitors",
+      cohort == "data3" & approach == "itt" ~ "c) Sulfonylureas"
     )
   )
 

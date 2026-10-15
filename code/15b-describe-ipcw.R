@@ -355,13 +355,41 @@ disc_per_group <- data %>%
     prop_disc = sum(disc == 1)/n()
   )
 
-
 disc_per_glp1 <- data %>%
   group_by(index_glp1) %>%
   summarize(
     prop_disc = sum(disc == 1)/n()
   )
 
+# Proportion who discontinued within 1 year
+disc_first_year_class <- data %>%
+  mutate(
+    disc_one_year = if_else(disc == 1 & !is.na(time_to_disc) & time_to_disc < 365, 1, 0)
+  ) %>%
+  group_by(index_class) %>%
+  summarize(prop_disc = sum(disc_one_year == 1)/n())
+
+disc_first_year_glp1 <- data %>%
+  mutate(
+    disc_one_year = if_else(disc == 1 & !is.na(time_to_disc) & time_to_disc < 365, 1, 0)
+  ) %>%
+  group_by(index_glp1) %>%
+  summarize(prop_disc = sum(disc_one_year == 1)/n())
+
+# Proportion who switched within 1 year
+switch_first_year_class <- data %>%
+  mutate(
+    switch_one_year = if_else(switch == 1 & !is.na(time_to_switch) & time_to_switch < 365, 1, 0)
+  ) %>%
+  group_by(index_class) %>%
+  summarize(prop_switch = sum(switch_one_year == 1)/n())
+
+switch_first_year_glp1 <- data %>%
+  mutate(
+    switch_one_year = if_else(switch == 1 & !is.na(time_to_switch) & time_to_switch < 365, 1, 0)
+  ) %>%
+  group_by(index_glp1) %>%
+  summarize(prop_switch = sum(switch_one_year == 1)/n())
 
 # Overall weights summary
 weights_summary_overall <- data %>%
@@ -403,4 +431,8 @@ write.csv(time_summary_overall, file.path(results_dir, "time_to_censoring_overal
 write.csv(weights_summary_by_group, file.path(results_dir, "ipcw_weights_group_novel.csv"), row.names = FALSE)
 write.csv(disc_per_group, file.path(results_dir, "disc_per_group_novel.csv"), row.names = FALSE)
 write.csv(disc_per_glp1, file.path(results_dir, "disc_per_glp1_novel.csv"), row.names = FALSE)
+write.csv(disc_first_year_class, file.path(results_dir, "disc_first_year_class.csv"), row.names = FALSE)
+write.csv(disc_first_year_glp1, file.path(results_dir, "disc_first_year_glp1.csv"), row.names = FALSE)
+write.csv(switch_first_year_class, file.path(results_dir, "switch_first_year_class.csv"), row.names = FALSE)
+write.csv(switch_first_year_glp1, file.path(results_dir, "switch_first_year_glp1.csv"), row.names = FALSE)
 write.csv(weights_summary_overall, file.path(results_dir, "ipcw_weights_overall_novel.csv"), row.names = FALSE)
