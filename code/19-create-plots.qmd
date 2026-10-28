@@ -52,9 +52,9 @@ end_date <- ymd(Sys.getenv("STUDY_END", unset = "2025-12-31"))
 # Collected per-cohort ITT KM panels for the stacked manuscript figure 3.
 itt_panels <- list()
 panel_titles <- c(
-  data1 = "(a) Semaglutide/Tirzepatide vs SGLT2 Inhibitors",
-  data2 = "(b) Semaglutide/Tirzepatide vs DPP4 Inhibitors",
-  data3 = "(c) Semaglutide/Tirzepatide vs Sulfonylureas"
+  data1 = "(a) GLP1 RAs vs SGLT2 Inhibitors",
+  data2 = "(b) GLP1 RAs vs DPP4 Inhibitors",
+  data3 = "(c) GLP1 RAs vs Sulfonylureas"
 )
 
 data     <- readRDS(out_path("data_novel.rds"))
@@ -75,13 +75,13 @@ for (cohort_name in c("data1", "data2", "data3")) {
 
   if (cohort_name == "data1") {
     ref <- "SGLT2 Inhibitors"
-    index <- "Semaglutide/Tirzepatide"
+    index <- "GLP1 RAs"
   } else if (cohort_name == "data2") {
     ref <- "DPP4 Inhibitors"
-    index <- "Semaglutide/Tirzepatide"
+    index <- "GLP1 RAs"
   } else if (cohort_name == "data3") {
     ref <- "Sulfonylureas"
-    index <- "Semaglutide/Tirzepatide"
+    index <- "GLP1 RAs"
   }
 
   cohort$study_end <- end_date
@@ -96,6 +96,10 @@ for (cohort_name in c("data1", "data2", "data3")) {
                                na.rm = TRUE)
 
   cohort$f_up_start <- cohort$index_date + 90
+
+  # exclude early events (outcome between index and start of follow-up), as
+  # in 18-run-survival-analyses.qmd
+  cohort %<>% filter(is.na(!!sym(date_name)) | !!sym(date_name) >= f_up_start)
 
   cohort %<>%
     mutate(
@@ -165,7 +169,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
                   legend.title = "Treatment",
                   legend.labs = c(ref, index),
                   palette = c("#009E73", "#CC79A7"),
-                  ylim = c(0, 0.035)) # adjust scale as needed
+                  ylim = c(0, 0.027)) # adjust scale as needed
 
   print(p)
 
@@ -206,7 +210,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
                   legend.title = "Treatment",
                   legend.labs = c(ref, index),
                   palette = c("#009E73", "#CC79A7"),
-                  ylim = c(0, 0.035)) # adjust scale as needed
+                  ylim = c(0, 0.027)) # adjust scale as needed
 
   print(p)
   pdf(file.path(results_dir, paste0("km_pp_", outcome, "_", cohort_name, ".pdf")), width = 10, height = 8, onefile = FALSE)
@@ -245,6 +249,8 @@ if (is_main) {
 # FOREST PLOT
 ```{r}
 #| label: forest-plot
+#| fig-width: 16
+#| fig-height: 5
 #### FOREST PLOT ####
 
 ## load results (written by 18-run-survival-analyses.qmd in this same pipeline run)
@@ -281,7 +287,7 @@ res_plot <- forest_data %>%
     pvalue < .01 ~ "<0.01",
     TRUE ~ str_pad(as.character(round(pvalue, 2)), width=4, pad="0", side="right")
   )) %>%
-  mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2", "b) DPP4", "c) SU"))) %>%
+  mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2 Inhibitors", "b) DPP4 Inhibitors", "c) Sulfonylureas"))) %>%
   bind_rows(data.frame(
     Comparator = factor("Comparator"),
     estimate_lab = "HR (95% CI)",
@@ -335,7 +341,7 @@ p_count_comp <-
 # Without this, p_line has 3 rows and the text columns have 4, so the line
 # and point for each HR don't align with the matching text values.
 p_line_data <- forest_data %>%
-  mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2", "b) DPP4", "c) SU"))) %>%
+  mutate(Comparator = fct_rev(fct_relevel(Comparator, "a) SGLT2 Inhibitors", "b) DPP4 Inhibitors", "c) Sulfonylureas"))) %>%
   bind_rows(data.frame(Comparator = factor("Comparator"),
                        hr        = NA_real_,
                        ci_lower  = NA_real_,
@@ -380,11 +386,13 @@ p_pval <-
 
 
 # layout
+# p_name is wide enough for the full comparator names (e.g. "a) SGLT2
+# Inhibitors") so they don't run into the event counts.
 layout <- c(
-  area(t = 0, l = 0,  b = 30, r = 3),   # p_name
-  area(t = 0, l = 3,  b = 30, r = 7),   # p_count_trt
-  area(t = 0, l = 7,  b = 30, r = 11),   # p_count_comp
-  area(t = 0, l = 11,  b = 30, r = 26),  # p_line
+  area(t = 0, l = 0,  b = 30, r = 5),   # p_name
+  area(t = 0, l = 5,  b = 30, r = 9),   # p_count_trt
+  area(t = 0, l = 9,  b = 30, r = 13),  # p_count_comp
+  area(t = 0, l = 13, b = 30, r = 26),  # p_line
   area(t = 0, l = 26, b = 30, r = 30),  # p_hr
   area(t = 0, l = 30, b = 30, r = 32)   # p_pval
 )
@@ -404,7 +412,7 @@ figure_2_note <- sprintf(
   paste0("Note: Analytic sample sizes of N=%s for GLP-1 cohort, N=%s for SGLT2 cohort, ",
          "N=%s for DPP4 cohort, and N=%s for sulfonylureas after excluding patients with ",
          "an event within 90 days and less than 90 days of follow-up after index date.\n",
-         "Abbreviations: HR=hazard ratio; SU=sulfonylureas."),
+         "Abbreviations: HR=hazard ratio."),
   fmt_n(n_glp1), fmt_n(n_sglt2), fmt_n(n_dpp4), fmt_n(n_sulfo)
 )
 
@@ -468,9 +476,17 @@ flow <- readr::read_csv(flow_path, show_col_types = FALSE)
 flow$step <- as.character(flow$step)
 
 is_after <- grepl("^After exclude", flow$step)
+# Analytic exclusions are the data-quality drops only. The index-drug exclusion
+# (dulaglutide/liraglutide) is a cohort-definition exclusion and belongs with
+# the study population exclusions, so it is deliberately NOT listed here - step
+# 14 applies it before these two, so box 3 still lands on the count after all
+# study population exclusions.
+#
+# NOTE: these strings must match `seq_steps` in 14-clean-data.qmd exactly. A
+# step that fails to match here falls through into `study_pop` instead, which
+# silently misplaces its exclusion row AND shifts the box 3 / box 4 counts.
 is_analytic <- flow$step %in% c("After exclude unreadable BMI/Z68 value",
-                                "After exclude missing region",
-                                "After exclude other GLP-1 agents")
+                                "After exclude missing region")
 is_subgroup <- grepl("^Subgroup novel", flow$step)
 study_pop <- flow[is_after & !is_analytic, , drop = FALSE]
 analytic  <- flow[is_analytic, , drop = FALSE]
@@ -491,18 +507,22 @@ sentence_case <- function(s) {
 }
 pretty_label <- function(s) sentence_case(sub("^After exclude ", "", s))
 
+# Wrap each exclusion item so long labels (e.g. the prior-use exclusion) stay
+# inside the side box; box heights below are sized from the wrapped line count.
+excl_items <- function(steps, n_excl, w = 55) {
+  vapply(paste0(pretty_label(steps), ": N=", fmt_n(n_excl)),
+         function(s) paste(strwrap(s, width = w), collapse = "\n"),
+         character(1), USE.NAMES = FALSE)
+}
 study_excl_text <- paste0(
   "Study population exclusions:\n",
-  paste0("  ", pretty_label(study_pop$step), ": N=",
-         fmt_n(study_pop$`Excluded (novel)`),
-         collapse = "\n")
+  paste(excl_items(study_pop$step, study_pop$`Excluded (novel)`), collapse = "\n")
 )
 analytic_excl_text <- paste0(
   "Analytic exclusions:\n",
-  paste0("  ", pretty_label(analytic$step), ": N=",
-         fmt_n(analytic$`Excluded (novel)`),
-         collapse = "\n")
+  paste(excl_items(analytic$step, analytic$`Excluded (novel)`), collapse = "\n")
 )
+n_lines <- function(s) lengths(strsplit(s, "\n", fixed = TRUE))
 
 # --- BOX 5: one box per index_class / per index_glp1 -------------------------
 sub_n <- setNames(subgroups$novel, sub("^Subgroup novel ", "", subgroups$step))
@@ -545,8 +565,8 @@ mainw  <- 5.6
 sidew  <- 6.2
 boxh   <- 2.0    # standard height for the four spine boxes
 box1_h <- 2.6    # box 1 has up to 4 lines of text
-side_h_study    <- 0.42 * (nrow(study_pop) + 1) + 0.4
-side_h_analytic <- 0.42 * (nrow(analytic)  + 1) + 0.4
+side_h_study    <- 0.42 * n_lines(study_excl_text)    + 0.4
+side_h_analytic <- 0.42 * n_lines(analytic_excl_text) + 0.4
 
 # Spine y-coords. Vertical gaps between spine boxes are widened so that the
 # (often tall) study- and analytic-exclusion breakdown boxes sit comfortably

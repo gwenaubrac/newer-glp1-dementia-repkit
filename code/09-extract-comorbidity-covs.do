@@ -1,10 +1,10 @@
 include "_globals.do"
+clear
+cd "$OUTPUT_DIR"
 
 * ============================================================================
 * Hospitalization
 * ============================================================================
-clear
-cd "$OUTPUT_DIR"
 
 use final_novel, clear
 gen lookback_date = index_date - $LOOKBACK_DAYS
@@ -99,17 +99,37 @@ global ihd "I20 I21 I22 I23 I24 I25"
 global nafld "K760"
 global pace "Z950 Z95810 Z95811 Z95812 02H63JZ 02H73JZ 02HK3JZ 0JH604Z 0JPT0PZ 0JH60PZ 02HK3KZ 0JH608Z 0JPT0PZ 0JH60KZ 33262 33263 33264"
 global pvd "I70 I71 I72 I73 I74 I75 I76 I77 I78 I79"
-global vhd "I42 I43 I514"
 global edema "R60"
 global apnea "G473"
 global thyroid "E00 E01 E02 E03 E04 E05 E06 E07"
-global falls "W00 W01 W03 W04 W05 W06 W07 W08 W09 W10 W11 W12 W13 W14 W15 W16 W17 W18 W19"
 global fractures "M484 M495 M80 M843 M844 M907 M966 S02 S12 S22 S32 S42 S52 S62 S72 S82 S92 T02 T08 T10 T12 T142"
 global care_dependency "Z74.0 Z74.1 Z74.2 Z74.3 Z74.8 Z74.9 Z99"
 global malnutrition "E40 E41 E42 E43 E44 E45 E46"
 global aki "N17"
 global proteinuria "R80"
 global hf_hosp "I50 I0981 I110 I130 I132"
+global immun "Z23"
+global screening "Z12"
+global exam "Z00"
+global anemia "D50 D52 D53 D62 D63 D64"
+global arthtro "M05 M06 M15 M16 M17 M18 M19"
+global afib	"I47 I48 I49"
+global contusion "S00 S10 S20 S30 S40 S50 S60 S70 S80 S81 S90 S91"
+global weak	"R531 R5381 R54 R627 R64"
+global dehydration	"E86 E87"
+global delirium	"F05 F06"
+global falls "R26 R296 Z9181 W00 W01 W03 W04 W05 W06 W07 W08 W09 W10 W11 W12 W13 W14 W15 W16 W17 W18 W19"
+global osteo "M81"
+global parkinson "G20 G21 G23"
+global flu "J09 J10 J11 J12 J13 J14 J15 J16 J17 J18"
+global sepsis "A40 A41 R652"
+global mental "F20 F21 F22 F23 F24 F25 F28 F29 F30 F31"
+global infection "E11621 L00 L01 L02 L03 L04 L05 L08 L89 L97"
+global smoke "F17 Z87891 Z720"
+global syncope "R55 I95"
+global vhd "I05 I07 I08 I091 I0989 I34 I35 I36 I37 I38 I39 Q230 Q232 Q233"
+global cardio "I40 I41 I42 I43 I514"
+global vte "I26 I80 I81 I82"
 
 * these are tests
 display "alcohol macro contains: $alcohol"
@@ -218,9 +238,6 @@ get_codes, name(pace) codes($pace)
 clear
 get_codes, name(pvd) codes($pvd)
 
-clear
-get_codes, name(vhd) codes($vhd)
-
 clear 
 get_codes, name(edema) codes($edema)
 
@@ -240,9 +257,6 @@ clear
 get_codes, name(anxiety) codes($anxiety)
 
 clear
-get_codes, name(falls) codes($falls)
-
-clear
 get_codes, name(fractures) codes($fractures)
 
 clear
@@ -257,6 +271,71 @@ get_codes, name(aki) codes($aki)
 clear
 get_codes, name(proteinuria) codes($proteinuria)
 
+clear
+get_codes, name(immun) codes($immun)
+
+clear
+get_codes, name(screening) codes($screening)
+
+clear
+get_codes, name(exam) codes($exam)
+
+clear
+get_codes, name(anemia) codes($anemia)
+
+clear
+get_codes, name(arthtro) codes($arthtro)
+
+clear
+get_codes, name(afib) codes($afib)
+
+clear
+get_codes, name(contusion) codes($contusion)
+
+clear
+get_codes, name(weak) codes($weak)
+
+clear
+get_codes, name(dehydration) codes($dehydration)
+
+clear
+get_codes, name(delirium) codes($delirium)
+
+clear
+get_codes, name(falls) codes($falls)
+
+clear
+get_codes, name(osteo) codes($osteo)
+
+clear
+get_codes, name(parkinson) codes($parkinson)
+
+clear
+get_codes, name(flu) codes($flu)
+
+clear
+get_codes, name(sepsis) codes($sepsis)
+
+clear
+get_codes, name(mental) codes($mental)
+
+clear
+get_codes, name(infection) codes($infection)
+
+clear
+get_codes, name(smoke) codes($smoke)
+
+clear
+get_codes, name(syncope) codes($syncope)
+
+clear
+get_codes, name(vhd) codes($vhd)
+
+clear
+get_codes, name(cardio) codes($cardio)
+
+clear
+get_codes, name(vte) codes($vte)
 
 * we will break hypertension into bits because run into crashes/memory issues (likely because this condition is so common)
 * and we will not search service lines for it due to memory issues (only medical headers)
@@ -332,6 +411,20 @@ get_codes_2, name(hyper6) codes($hyper6)
 
 clear
 get_codes_2, name(hyper7) codes($hyper7)
+
+* same with dorsopathies
+global dorso1 "M40 M41 M42"
+global dorso2 "M43 M45 M46 M47"
+global dorso3 "M48 M49 M50 M51 M53 M54"
+
+clear
+get_codes_2, name(dorso1) codes($dorso1)
+
+clear
+get_codes_2, name(dorso2) codes($dorso2)
+
+clear
+get_codes_2, name(dorso3) codes($dorso3)
 
 * same for dyslipidemia
 

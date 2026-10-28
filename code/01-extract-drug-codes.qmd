@@ -36,10 +36,15 @@ if (nchar(project_root) == 0) stop("PROJECT_ROOT is not set. To run this file di
 output_dir  <- file.path(project_root, "output")
 results_dir <- Sys.getenv("RESULTS_DIR", unset = file.path(project_root, "results"))
 
-# Set up connection to Snowflake
+# Set up connection to Snowflake. Env var is DSN (uppercase, as written by
+# 00-setup.R into .Renviron); reading it as "dsn" only resolves on Windows,
+# where environment lookups are case-insensitive.
+snowflake_dsn <- Sys.getenv("DSN")
+if (nchar(snowflake_dsn) == 0) stop("DSN is not set. To run this file directly in an R session, source code/00-setup.R first in the same session (it loads .Renviron). Otherwise launch the full pipeline via run_all.R / run_all.command / run_all.bat.")
+
 con <- dbConnect(
   odbc::odbc(),
-  dsn = Sys.getenv("dsn")
+  dsn = snowflake_dsn
 )
 
 # create output directory

@@ -276,6 +276,17 @@ forvalues chunk = 1/`n_chunks' {
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
+    
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
     
@@ -398,6 +409,17 @@ forvalues chunk = 1/`n_chunks' {
     
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
+    
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -522,6 +544,17 @@ forvalues chunk = 1/`n_chunks' {
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
+    
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
     
@@ -642,6 +675,17 @@ forvalues chunk = 1/`n_chunks' {
     
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
+    
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -764,6 +808,17 @@ forvalues chunk = 1/`n_chunks' {
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
+    
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
     
@@ -884,6 +939,17 @@ forvalues chunk = 1/`n_chunks' {
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
+    
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
     
@@ -1002,6 +1068,17 @@ forvalues chunk = 1/`n_chunks' {
     
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
+    
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
@@ -1123,6 +1200,17 @@ forvalues chunk = 1/`n_chunks' {
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
     
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
+    
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force
     
@@ -1241,6 +1329,17 @@ forvalues chunk = 1/`n_chunks' {
     
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
+    
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
     
     * dedup within chunk
     gduplicates drop PATIENT_ID DATE_OF_SERVICE NDC11, force

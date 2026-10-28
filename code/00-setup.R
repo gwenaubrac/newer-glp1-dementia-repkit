@@ -80,7 +80,7 @@ if (file.exists(renviron_path)) {
     stop("Need to prompt for the Snowflake DSN. ",
          "Re-run this script interactively (e.g., open it in RStudio).")
 
-  dsn <- readline("Enter your Snowflake DSN (as configured in Windows ODBC): ")
+  dsn <- readline("Enter your Snowflake DSN (as configured in Windows ODBC) without quotations around it: ")
   dsn <- trimws(dsn)
   if (!nzchar(dsn)) stop("DSN cannot be empty.")
 

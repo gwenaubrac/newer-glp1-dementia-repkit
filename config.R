@@ -103,10 +103,16 @@ DATA_DIR        <- normalizePath(DATA_DIR,        winslash = "/", mustWork = FAL
 # Pin study dates + Snowflake namespace + main output anchor into the env so
 # .do / .qmd scripts can read them. The Stata globals are also written into
 # _globals.do below.
+# DSN is re-exported explicitly so child processes (quarto -> R, Stata) inherit
+# it from this session rather than relying on each one reading .Renviron itself.
+# A child's working directory is not always PROJECT_ROOT (quarto renders with
+# the working directory set to the document's folder), so .Renviron is not
+# guaranteed to be picked up at child startup.
 Sys.setenv(STUDY_START      = STUDY_START,
            STUDY_END        = STUDY_END,
            SNOWFLAKE_CLIENT = SNOWFLAKE_CLIENT,
            SNOWFLAKE_COHORT = SNOWFLAKE_COHORT,
+           DSN              = SNOWFLAKE_DSN,
            MAIN_OUTPUT_DIR  = MAIN_OUTPUT_DIR)
 
 # Writes <PROJECT_ROOT>/_globals.do containing one `global X "value"` per

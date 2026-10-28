@@ -8,8 +8,7 @@ embed-resources: true
 ## Overview
 
 Perform ITT survival analyses using Cox proportional hazards model with the treatment weights (overlap weights for the main analysis; IPTW/entropy for the weight sensitivity scenarios):
-- For multiple outcomes: dementia outcomes and subtypes (all-cause, lewy body, Alzheimer), negative control outcomes, and sentinel measures of dementia (order for neuroimaging, Parkinson's disease, and MCI). For sentinel measures, patients are additionally censored when they experience all-cause dementia. 
-- In ITT, patients are censored at coverage end, study end, follow-up cap (see below), date of death, or occurrence of the outcome.
+- Ptients are censored at coverage end, study end, follow-up cap (see below), date of death, or occurrence of the outcome.
 - Follow-up starts after 90 days to reduce the influence of early events. Patients with an early event during this window were excluded from the analysis. A negative follow-up means that the patient left the cohort (due to death, end of coverage, end of study, cap of follow-up, occurrence of the event) during that period of first 90 days. Those patients were excluded and did not contribute to the numerator nor denominator.
 
 Perform AT survival analyses using Cox proportional hazards model with IPCW weights: 
@@ -93,12 +92,6 @@ max_fu <- 730 # truncate follow-up up to 2 years after entry
 
 #### SURVIVAL ANALYSES ####
 
-# here, patients will not be censored if they experience all-cause dementia
-# since all-cause dementia or its subtypes are the events of interest
-
-# we are also incorporating the negative control outcomes in this loop
-# since similarly, we would not censor at all-cause dementia for those
-
 # save results from all models
 all_cox_results <- list()
 
@@ -125,6 +118,7 @@ cox_ph <- data.frame(
   cohort = NA,
   approach = NA,
   outcome = NA,
+  chisq = NA,
   pvalue = NA
 )
 
@@ -136,10 +130,15 @@ dementia_outcomes <- c(
   "dementia_allcause",
 
   # negative control outcomes:
-  "appendicitis",
   "tooth",
   "bell",
-  "basal"
+  "basal",
+  "herpes",
+  #"transport",
+  "resp",
+  "hearing",
+  "lens",
+  "gastro"
 )
 
 for (outcome in c(dementia_outcomes)) {
@@ -150,18 +149,6 @@ for (outcome in c(dementia_outcomes)) {
     
     date_name <- paste0("outcome_", outcome, "_date")
     
-    
-    if (cohort_name == "data1") {
-      ref <- "SGLT2"
-      index <- "Semaglutide/Tirzepatide"
-    } else if (cohort_name == "data2") {
-      ref <- "DPP4"
-      index <- "Semaglutide/Tirzepatide"
-    } else if (cohort_name == "data3") {
-      ref <- "Sulfonylureas"
-      index <- "Semaglutide/Tirzepatide"
-    }
-
     
     ### ITT APPROACH ###
     
@@ -182,6 +169,11 @@ for (outcome in c(dementia_outcomes)) {
     # the sens7_index_followup scenario), to reduce the influence of early
     # events likely driven by confounding by indication / reverse causality.
     cohort$f_up_start <- cohort$index_date + fu_offset_days
+
+    # Exclude patients whose outcome occurred between index and the start of
+    # follow-up (early events); otherwise they would stay in the risk set as
+    # non-events. Outcome dates are the first claim after index (see 13).
+    cohort %<>% filter(is.na(!!sym(date_name)) | !!sym(date_name) >= f_up_start)
 
     # create indicator for itt_event
     # no event if no date of event or if occurred after ITT exit
@@ -238,7 +230,7 @@ for (outcome in c(dementia_outcomes)) {
                          cluster = PATIENT_ID, 
                          robust = TRUE)
 
-    coxph_p <- cox.zph(cox_mod_itt_crude)$table["trt", "p"]
+    coxph_zph <- cox.zph(cox_mod_itt_crude)$table["trt", ]
     
     cox_ph <- rbind(
       cox_ph,
@@ -246,7 +238,8 @@ for (outcome in c(dementia_outcomes)) {
         cohort = cohort_name,
         approach = "itt crude",
         outcome = outcome,
-        pvalue = coxph_p
+        chisq = coxph_zph[["chisq"]],
+        pvalue = coxph_zph[["p"]]
       )
     )
     
@@ -277,7 +270,7 @@ for (outcome in c(dementia_outcomes)) {
                          cluster = PATIENT_ID,
                          robust = TRUE)
 
-    coxph_p <- cox.zph(cox_mod_itt)$table["trt", "p"]
+    coxph_zph <- cox.zph(cox_mod_itt)$table["trt", ]
     
     cox_ph <- rbind(
       cox_ph,
@@ -285,7 +278,8 @@ for (outcome in c(dementia_outcomes)) {
         cohort = cohort_name,
         approach = "itt weighted",
         outcome = outcome,
-        pvalue = coxph_p
+        chisq = coxph_zph[["chisq"]],
+        pvalue = coxph_zph[["p"]]
       )
     )
 
@@ -375,7 +369,7 @@ for (outcome in c(dementia_outcomes)) {
                         cluster = PATIENT_ID, 
                         robust = TRUE)
 
-    coxph_p <- cox.zph(cox_mod_pp_crude)$table["trt", "p"]
+    coxph_zph <- cox.zph(cox_mod_pp_crude)$table["trt", ]
     
     cox_ph <- rbind(
       cox_ph,
@@ -383,7 +377,8 @@ for (outcome in c(dementia_outcomes)) {
         cohort = cohort_name,
         approach = "pp crude",
         outcome = outcome,
-        pvalue = coxph_p
+        chisq = coxph_zph[["chisq"]],
+        pvalue = coxph_zph[["p"]]
       )
     )
     
@@ -416,7 +411,7 @@ for (outcome in c(dementia_outcomes)) {
                             cluster = PATIENT_ID,
                             robust = TRUE)
 
-    coxph_p <- cox.zph(cox_mod_pp)$table["trt", "p"]
+    coxph_zph <- cox.zph(cox_mod_pp)$table["trt", ]
     
     cox_ph <- rbind(
       cox_ph,
@@ -424,7 +419,8 @@ for (outcome in c(dementia_outcomes)) {
         cohort = cohort_name,
         approach = "pp weighted + IPCW",
         outcome = outcome,
-        pvalue = coxph_p
+        chisq = coxph_zph[["chisq"]],
+        pvalue = coxph_zph[["p"]]
       )
     )
     
@@ -519,6 +515,7 @@ cox_ph_fals <- data.frame(
   cohort = NA,
   approach = NA,
   outcome = NA,
+  chisq = NA,
   pvalue = NA
 )
 
@@ -538,18 +535,6 @@ for (outcome in c(dementia_outcomes)) {
     
     date_name <- paste0("outcome_", outcome, "_date")
     
-    
-    if (cohort_name == "data1") {
-      ref <- "SGLT2"
-      index <- "Semaglutide/Tirzepatide"
-    } else if (cohort_name == "data2") {
-      ref <- "DPP4"
-      index <- "Semaglutide/Tirzepatide"
-    } else if (cohort_name == "data3") {
-      ref <- "Sulfonylureas"
-      index <- "Semaglutide/Tirzepatide"
-    }
-
     
     ### ITT APPROACH ###
     
@@ -618,7 +603,7 @@ for (outcome in c(dementia_outcomes)) {
                          cluster = PATIENT_ID, 
                          robust = TRUE)
 
-    coxph_p <- cox.zph(cox_mod_itt_crude)$table["trt", "p"]
+    coxph_zph <- cox.zph(cox_mod_itt_crude)$table["trt", ]
     
     cox_ph_fals <- rbind(
       cox_ph_fals,
@@ -626,7 +611,8 @@ for (outcome in c(dementia_outcomes)) {
         cohort = cohort_name,
         approach = "itt crude",
         outcome = outcome,
-        pvalue = coxph_p
+        chisq = coxph_zph[["chisq"]],
+        pvalue = coxph_zph[["p"]]
       )
     )
     
@@ -657,7 +643,7 @@ for (outcome in c(dementia_outcomes)) {
                          cluster = PATIENT_ID,
                          robust = TRUE)
 
-    coxph_p <- cox.zph(cox_mod_itt)$table["trt", "p"]
+    coxph_zph <- cox.zph(cox_mod_itt)$table["trt", ]
     
     cox_ph_fals <- rbind(
       cox_ph_fals,
@@ -665,7 +651,8 @@ for (outcome in c(dementia_outcomes)) {
         cohort = cohort_name,
         approach = "itt weighted",
         outcome = outcome,
-        pvalue = coxph_p
+        chisq = coxph_zph[["chisq"]],
+        pvalue = coxph_zph[["p"]]
       )
     )
 
@@ -831,12 +818,17 @@ fmt_hr <- function(st, app, out = "dementia_allcause") {
   }, character(1))
 }
 
-#### e-Table 4: Negative Control Outcomes (overlap-weighted ITT) ####
+#### e-Table 5: Negative Control Outcomes (overlap-weighted ITT) ####
 nco_labels <- c(
-  appendicitis = "Appendicitis",
   tooth        = "Traumatic tooth fracture",
   bell         = "Bell's Palsy",
-  basal        = "Basal cell carcinoma"
+  basal        = "Basal cell carcinoma",
+  herpes       = "Herpes zoster",
+  #transport    = "Transport accident",
+  resp         = "Chronic lower respiratory diseases",
+  hearing      = "Hearing loss",
+  lens         = "Lens disorders",
+  gastro       = "Gastrointestinal events"
 )
 
 e_tab5 <- do.call(rbind, lapply(names(nco_labels), function(out) {
@@ -876,6 +868,49 @@ if (is_main) {
                         file.path(manuscript_tab_dir, "e-table-5-nco.xlsx"),
                         sheet = "e-Table 5")
 }
+
+#### e-Table 7: Proportional hazards assumption (Schoenfeld residuals) ####
+# cox.zph test of the treatment term for each all-cause dementia model in the
+# main analysis, pulled from cox_ph. In the main run the PP weighted model uses
+# overlap weights only (no IPCW), despite the "pp weighted + IPCW" label.
+ph_models <- c(
+  "itt crude"          = "  Intention-to-treat, crude",
+  "itt weighted"       = "  Intention-to-treat, overlap weights",
+  "pp crude"           = "  Per-protocol, crude",
+  "pp weighted + IPCW" = "  Per-protocol, overlap weights"
+)
+cohort_lab <- c(data1 = "GLP1s vs SGLT2s", data2 = "GLP1s vs DPP4s",
+                data3 = "GLP1s vs Sulfonylureas")
+fmt_p <- function(p) if_else(p < 0.001, "<0.001", sprintf("%.3f", p))
+
+e_tab7 <- do.call(rbind, lapply(names(cohort_lab), function(coh) {
+  rbind(
+    c(cohort_lab[[coh]], "", ""),
+    do.call(rbind, lapply(names(ph_models), function(app) {
+      r <- cox_ph %>% filter(cohort == coh, outcome == "dementia_allcause", approach == app)
+      if (nrow(r) == 1) c(ph_models[[app]], sprintf("%.2f", r$chisq), fmt_p(r$pvalue))
+      else c(ph_models[[app]], NA_character_, NA_character_)
+    }))
+  )
+}))
+e_tab7 <- as.data.frame(e_tab7, stringsAsFactors = FALSE)
+colnames(e_tab7) <- c("Comparison and model", "Chi-square (1 df)", "P value")
+
+footnote_df <- as.data.frame(
+  rbind(
+    c("Notes:", "", ""),
+    c("  Outcome: all-cause dementia. Test of the treatment term from scaled Schoenfeld residuals (survival::cox.zph, default Kaplan-Meier time transform); P < 0.05 suggests a departure from proportional hazards.", "", "")
+  ),
+  stringsAsFactors = FALSE
+)
+colnames(footnote_df) <- colnames(e_tab7)
+e_tab7 <- rbind(e_tab7, footnote_df)
+
+if (is_main) {
+  write_manuscript_xlsx(e_tab7,
+                        file.path(manuscript_tab_dir, "e-table-7-ph-test.xlsx"),
+                        sheet = "e-Table 7")
+}
 ```
 
 ```{r}
@@ -912,8 +947,11 @@ if (is_main) {
     "sens8_6mo_followup",
     "sens9_age_cap"
   )
+  # sens10_competing_risk reports risks rather than HRs; it has its own
+  # supplemental table (e-table 6, written by 20-competing-events.R).
   sens_order <- c(sens_order,
-                  setdiff(names(SENSITIVITY_SCENARIOS), sens_order))
+                  setdiff(names(SENSITIVITY_SCENARIOS),
+                          c(sens_order, "sens10_competing_risk")))
 
   # Sensitivity scenarios save their rds to results/<scenario>/
   scenarios_root <- dirname(results_dir)

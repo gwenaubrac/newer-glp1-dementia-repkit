@@ -38,7 +38,8 @@ PIPELINE <- list(
   c("16-compute-ow.qmd",                    "QMD"),
   c("17-describe-study-sample.qmd",               "QMD"),
   c("18-run-survival-analyses.qmd",         "QMD"),
-  c("19-create-plots.qmd",                    "QMD")
+  c("19-create-plots.qmd",                    "QMD"),
+  c("20-competing-events.R",                "R")
 )
 N <- length(PIPELINE)
 step_label <- function(i) sprintf(" [%2d/%d] %-7s %s", i, N,

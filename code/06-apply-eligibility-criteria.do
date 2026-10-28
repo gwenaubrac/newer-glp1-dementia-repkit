@@ -193,11 +193,11 @@ save contra_novel, replace
 
 
 * ============================================================================
-* Evidence of MCI
+* Evidence of MCI or cognitive symptoms
 * ============================================================================
 
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'G3184%');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, CLAIM_DATE, code FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_HEADERS_LATEST UNPIVOT (code FOR col IN (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26 )) WHERE (code LIKE 'G3184%' OR code LIKE 'R41');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if CLAIM_DATE <= index_date
 keep if CLAIM_DATE >= lookback_date
@@ -216,7 +216,7 @@ save mci_novel, replace
 
 
 * ============================================================================
-* Prior neuroimaging order
+* Prior neuroimaging order or neurocognitive examination
 * ============================================================================
 
 * search in medical headers
@@ -239,14 +239,19 @@ save mci_novel, replace
 
 * search in service lines
 clear
-odbc load, exec("SELECT DISTINCT PATIENT_ID, PROCEDURE, SERVICE_FROM FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_SERVICE_LINES_LATEST  WHERE PROCEDURE IN ('70551', '70552', '70553', '70555', '70450', '70460', '70470', '0865T', '0866T');") dsn("$SNOWFLAKE_DSN")
+odbc load, exec("SELECT DISTINCT PATIENT_ID, PROCEDURE, SERVICE_FROM FROM $SNOWFLAKE_CLIENT.$SNOWFLAKE_COHORT.MEDICAL_SERVICE_LINES_LATEST  WHERE PROCEDURE IN ('70551', '70552', '70553', '70555', '70450', '70460', '70470', '0865T', '0866T', '96116', '96132', '96133', '96118', '96119', '96120', '96136', '96137', '96138', '96139', '96146');") dsn("$SNOWFLAKE_DSN")
 merge m:1 PATIENT_ID using continuous_novel, keep(match) nogen
 keep if SERVICE_FROM <= index_date
 keep if SERVICE_FROM >= lookback_date
 
 gen lookback_neuro_sl = 0
 
-replace lookback_neuro_sl = 1 if inlist(PROCEDURE, "70551", "70552", "70553", "70555", "70450", "70460", "70470", "0865T", "0866T")
+* String inlist() takes at most 10 arguments (the variable + 9 values), so the
+* 20 procedure codes are split across three calls rather than one.
+replace lookback_neuro_sl = 1 if ///
+    inlist(PROCEDURE, "70551", "70552", "70553", "70555", "70450", "70460", "70470", "0865T", "0866T") | ///
+    inlist(PROCEDURE, "96116", "96132", "96133", "96118", "96119", "96120", "96136", "96137", "96138") | ///
+    inlist(PROCEDURE, "96139", "96146")
 
 keep if lookback_neuro_sl==1
 collapse (max) lookback_neuro_sl, by(PATIENT_ID)
@@ -280,10 +285,11 @@ save lookback_bmi_novel, replace
 * No prior drug use
 * ============================================================================
 
+* excluding prior GLP-1 RA use and prior cholinesterase inhibitors use (dementia drugs)
 clear
 odbc load, exec("SELECT * FROM SENTINEL_COMMON.SENTINEL_REFERENCE.DRUG_REFERENCE") dsn("$SNOWFLAKE_DSN")
 sort PRECISE_GENERIC_NAME PRODUCT_NAME KH_THERAPEUTIC_CLASS_ARRAY
-keep if strpos(PRECISE_GENERIC_NAME, "ABLAGLUTIDE") | strpos(PRECISE_GENERIC_NAME, "EXENATIDE") | strpos(PRECISE_GENERIC_NAME, "LIXISENATIDE")
+keep if strpos(PRECISE_GENERIC_NAME, "ALBIGLUTIDE") | strpos(PRECISE_GENERIC_NAME, "EXENATIDE") | strpos(PRECISE_GENERIC_NAME, "LIXISENATIDE") | strpos(PRECISE_GENERIC_NAME, "DONEPEZIL") | strpos(PRECISE_GENERIC_NAME, "RIVASTIGMINE") | strpos(PRECISE_GENERIC_NAME, "GALANTAMINE") | strpos(PRECISE_GENERIC_NAME, "BENZGALANTAMINE") | strpos(PRECISE_GENERIC_NAME, "PYRIDOSTIGMINE") | strpos(PRECISE_GENERIC_NAME, "NEOSTIGMINE") | strpos(PRECISE_GENERIC_NAME, "PHYSOSTIGMINE")
 drop CODE_TYPE PRODUCT_NAME KH_ROUTE_ARRAY KH_THERAPEUTIC_CLASS_ARRAY PRECISE_GENERIC_NAME
 duplicates drop
 save ndc_other_glp, replace
@@ -339,6 +345,18 @@ forvalues chunk = 1/`n_chunks' {
     
     clear
     odbc load, exec(`"SELECT PATIENT_ID, DATE_OF_SERVICE, NDC11 FROM PHARMACY_LATEST WHERE NDC11 IN (`code_list')"') dsn("$SNOWFLAKE_DSN")
+
+    * The ODBC driver sometimes returns DATE_OF_SERVICE as text ("YYYY-MM-DD")
+    * instead of a Stata date, which breaks the append below (r(106)) and the
+    * date comparisons after the loop. Convert it to a numeric %td date if so.
+    capture confirm string variable DATE_OF_SERVICE
+    if !_rc {
+        gen double dos_num = date(DATE_OF_SERVICE, "YMD")
+        drop DATE_OF_SERVICE
+        rename dos_num DATE_OF_SERVICE
+        format %td DATE_OF_SERVICE
+    }
+
     append using `all_rx'
     save `all_rx', replace
     
@@ -479,7 +497,9 @@ file write log "After exclude <90 days of continuous coverage after index date: 
 drop if lookback_glp==1
 count
 local n_after = r(N)
-file write log "After exclude use of ablaglutide, exenatide, or lixisenatide in lookback: `n_after' patients" _n
+* lookback_glp flags prior use of BOTH the three GLP-1 RAs and the
+* cholinesterase inhibitors in the NDC list built above, so the label names both.
+file write log "After exclude prior use of albiglutide, exenatide, lixisenatide, or cholinesterase inhibitors: `n_after' patients" _n
 
 
 file close log

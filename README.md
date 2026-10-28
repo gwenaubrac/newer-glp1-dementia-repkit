@@ -24,7 +24,7 @@ cd <repo-name>
 Then open `code/00-setup.R` in RStudio and click **Source**. It will:
 
 1. Restore the pinned R package environment (`renv::restore`).
-2. Prompt you once for your **Snowflake DSN** (the name configured in your Windows ODBC Data Source Administrator).
+2. Prompt you once for your **Snowflake DSN** (the name configured in your Windows ODBC Data Source Administrator). You do not need to put quotations around it. 
 3. Write a `.Renviron` at the project root with your DSN and the project paths.
 
 ### 3. Run the pipeline
@@ -42,9 +42,11 @@ cd Desktop/newer-glp1-dementia-repkit
 "C:/Program Files/R/R-4.4.2/bin/x64/Rscript.exe" run_all.R
 ```
 
-The runner executes the 20 scripts in `code/` in order. Intermediate files go to `output/`, final results to `results/`, manuscript-ready figures/tables to `manuscript/figures/` and `manuscript/tables/`, per-step logs to `logs/<YYYYMMDD>/`.
+The runner executes the 21 scripts in `code/` in order. Intermediate files go to `output/`, final results to `results/`, manuscript-ready figures/tables to `manuscript/figures/` and `manuscript/tables/`, per-step logs to `logs/<YYYYMMDD>/`.
 
-> **Note on the manuscript folder.** The pipeline auto-populates `manuscript/figures/` with `figure-1-flowchart`, `figure-2-forest-plot`, and `figure-3-km-curves` (each as PDF + TIFF), and `manuscript/tables/` with `table-1-patient-char.csv`, `table-2-results.csv`, `e-table-4-weights.csv`, and `e-table-5-nco.csv`. Any other tables or figures that appear in the manuscript folder (e.g., e-tables 1-3, table 3) were added by the authors directly and are not produced by the pipeline.
+If you want to run a specific program directly in Rstudio, just source 00-setup.R first to load the environment.
+
+> **Note on the manuscript folder.** The pipeline auto-populates `manuscript/figures/` with `figure-1-flowchart`, `figure-2-forest-plot`, and `figure-3-km-curves` (each as PDF + TIFF), and `manuscript/tables/` with `table-1-patient-char.csv`, `table-2-results.csv`, `e-table-4-weights.csv`, and `e-table-5-nco.csv`. Running the `sens10_competing_risk` scenario additionally writes `e-figure-1-aj-curves` (PDF + TIFF) and `e-table-6-competing-risk.xlsx`. Any other tables or figures that appear in the manuscript folder (e.g., e-tables 1-3, table 3) were added by the authors directly and are not produced by the pipeline.
 
 **Useful flags** (pass to `Rscript run_all.R …` or the wrapper):
 
@@ -85,8 +87,9 @@ Per-scenario results land in `results/<scenario_name>/` (main's live in `results
 | `sens7_index_followup` | Start follow-up at index date (include early events) | `14-clean-data` |
 | `sens8_6mo_followup` | Require 6 months of follow-up after index, excluding early events | `14-clean-data` |
 | `sens9_age_cap` | Exclude patients aged >85 at baseline | `14-clean-data` |
+| `sens10_competing_risk` | Death as a competing event: overlap-weighted Aalen-Johansen cumulative incidence of dementia and death, 2-year risks, risk difference and risk ratio with bootstrap CIs (primary ITT analysis only); reported in e-table 6 and e-figure 1 rather than Table 2 | `20-competing-events` |
 
-To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The analysis scripts that read scenario parameters are `05`, `14`, `16`, `17`, `18`, and `19`.
+To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The analysis scripts that read scenario parameters are `05`, `14`, `16`, `17`, `18`, `19`, and `20`. Step `20-competing-events.R` only does work for `sens10_competing_risk` and is skipped on every other run.
 
 ## Study design
 
@@ -94,7 +97,7 @@ To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivit
 - **Data source**: Komodo Healthcare Map, May 2022 - December 2025 (proprietary; license required from Komodo Health)
 - **Population**: adults aged ≥60 with type 2 diabetes and BMI ≥25
 - **Comparisons**: GLP-1 agonists (tirzepatide + semaglutide) vs. SGLT-2 inhibitors, DPP-4 inhibitors, and sulfonylureas
-- **Outcomes**: primary - incident all-cause dementia; negative controls - appendicitis, basal cell carcinoma, traumatic tooth fracture, Bell's palsy
+- **Outcomes**: primary - incident all-cause dementia; negative controls - basal cell carcinoma, traumatic tooth fracture, Bell's palsy, herpes zoster, transport accident, chronic lower respiratory diseases, hearing loss, and lens disorders.
 
 ## Contact
 

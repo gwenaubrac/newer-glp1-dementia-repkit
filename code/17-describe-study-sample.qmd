@@ -68,124 +68,128 @@ render_binary <- function(x, ...) {
 
 # add formatted labels for covariates
 labels <- c(
+  # Sociodemographic characteristics
   age = "Age (years)",
-  alcohol = "Alcohol use disorders",
-  cancer = "Cancer",
-  cvd = "Cardiovascular disease",
-  ckd = "Chronic kidney disease",
-  revas = "Coronary revascularization",
-  ampu = "Diabetic amputation",
-  retino = "Diabetic retinopathy",
-  diab_neuro = "Diabetic neuropathy",
-  hypoglyc = "Hypoglycemia",
-  dyslipid = "Dyslipidemia",
-  eskd = "End-stage kidney disease",
-  hepa = "Hepatic disease",
-  hyper = "Hypertension",
-  ihd = "Ischemic heart disease",
-  nafld = "Non-alcoholic fatty liver disease",
-  pace = "Use of a pacemaker or defibrillator",
-  pvd = "Perivascular disease",
-  vhd = "Ventricular heart disease",
-  edema = "Edema",
-  copd = "COPD",
-  apnea = "Sleep apnea",
-  thyroid = "Thyroid disorders",
-  depression = "Depression",
-  anxiety = "Anxiety",
-  falls = "Falls",
-  fractures = "Fractures",
-  care_dependency = "Care dependency and mobility issues",
-  malnutrition = "Malnutrition",
-  aki = "Acute kidney injury",
-  proteinuria = "Proteinuria",
-  hf_hosp = "Hospitalization for heart failure",
-  hosp_cat = "Number of hospitalizations",
-  emerg_cat = "Number of emergency service use",
-  statin = "Statins",
-  betablocker = "Betablockers",
-  arb = "Angiotensin receptor inhibitors",
-  thiazide = "Thiazides",
-  ccb = "Calcium channel blockers",
-  aceinhibitor = "ACE inhibitors",
-  insulin = "Insulin",
-  metformin = "Metformin",
-  diuretic = "Loop diuretic",
-  prop_b_q = "ZIP5-level quintile of proportion with a Bachelor's or higher",
   gender = "Sex",
+  race = "Race and ethnicity",
+  region = "Region",
+  prop_b_q = "ZIP5-level quintile of proportion with a Bachelor's or higher",
+  plan_type = "Insurance plan type",
   year = "Initiation year",
   bmi_cat = "BMI category",
-  region = "Region",
-  race = "Race and ethnicity",
-  plan_type = "Insurance plan type"
+
+  # Healthcare utilization
+  hosp_cat = "Number of hospitalizations",
+  emerg_cat = "Number of emergency service use",
+  immun = "Immunization visit",
+  screening = "Cancer screening visit",
+  exam = "General health examination",
+
+  # Comorbidities
+  aki = "Acute kidney injury",
+  alcohol = "Alcohol use disorders",
+  ampu = "Diabetic amputation",
+  anemia = "Anemia",
+  anxiety = "Anxiety",
+  apnea = "Sleep apnea",
+  afib = "Atrial fibrillation",
+  arthtro = "Arthropathies",
+  cancer = "Cancer",
+  care_dependency = "Care dependency and mobility issues",
+  cardio = "Cardiomyopathy and myocarditis",
+  ckd = "Chronic kidney disease",
+  contusion = "Contusions and superficial injuries",
+  copd = "COPD",
+  cvd = "Cardiovascular disease",
+  dehydration = "Dehydration and electrolyte disorders",
+  delirium = "Delirium and other organic mental disorders",
+  depression = "Depression",
+  diab_neuro = "Diabetic neuropathy",
+  dorso = "Dorsopathies",
+  dyslipid = "Dyslipidemia",
+  edema = "Edema",
+  eskd = "End-stage kidney disease",
+  falls = "Falls, gait and mobility problems",
+  flu = "Pneumonia and influenza",
+  fractures = "Fractures",
+  hepa = "Hepatic disease",
+  hf_hosp = "Hospitalization for heart failure",
+  hyper = "Hypertension",
+  hypoglyc = "Hypoglycemia",
+  ihd = "Ischemic heart disease",
+  infection = "Skin infections and ulcers",
+  malnutrition = "Malnutrition",
+  mental = "Serious mental illness",
+  nafld = "Non-alcoholic fatty liver disease",
+  osteo = "Osteoporosis",
+  pace = "Use of a pacemaker or defibrillator",
+  parkinson = "Parkinson's and related disorders",
+  proteinuria = "Proteinuria",
+  pvd = "Peripheral vascular disease",
+  retino = "Diabetic retinopathy",
+  revas = "Coronary revascularization",
+  sepsis = "Sepsis and serious bacterial infections",
+  smoke = "Smoking",
+  syncope = "Syncope and hypotension",
+  thyroid = "Thyroid disorders",
+  vhd = "Valvular heart disease",
+  vte = "Venous thromboembolism",
+  weak = "Debility, weakness, failure to thrive",
+
+  # Concomitant medications
+  aceinhibitor = "ACE inhibitors",
+  arb = "Angiotensin receptor blockers",
+  betablocker = "Beta-blockers",
+  ccb = "Calcium channel blockers",
+  diuretic = "Loop diuretics",
+  insulin = "Insulin",
+  metformin = "Metformin",
+  statin = "Statins",
+  thiazide = "Thiazides"
 )
+
+# check for duplicate names
+stopifnot(!anyDuplicated(names(labels)))
 
 # apply labels to the datasets
 for (var in names(labels)) {
-  label(data[[var]]) <- labels[[var]]
+  label(data[[var]])  <- labels[[var]]
   label(data1[[var]]) <- labels[[var]]
   label(data2[[var]]) <- labels[[var]]
   label(data3[[var]]) <- labels[[var]]
 }
 
-# and define the order in which covariates will be listed in the table:
-cov_list <- c(
-  # Sociodemographic characteristics
-  "age",
-  "gender",
-  "race",
-  "region",
-  "prop_b_q",
-  "plan_type",
-  "year",
-  "bmi_cat",
-  "hosp_cat",
-  "emerg_cat",
+# define covariate groups
+socio <- c("age", "gender", "race", "region", "prop_b_q", "plan_type", "year", "bmi_cat")
 
-  # Comorbidities (alphabetical by label)
-  "alcohol",
-  "aki",
-  "anxiety",
-  "cancer",
-  "care_dependency",
-  "cvd",
-  "ckd",
-  "copd",
-  "revas",
-  "depression",
-  "ampu",
-  "diab_neuro",
-  "retino",
-  "dyslipid",
-  "edema",
-  "eskd",
-  "falls",
-  "fractures",
-  "hepa",
-  "hf_hosp",
-  "hypoglyc",
-  "hyper",
-  "ihd",
-  "malnutrition",
-  "nafld",
-  "proteinuria",
-  "pvd",
-  "apnea",
-  "thyroid",
-  "pace",
-  "vhd",
+utilization <- c("hosp_cat", "emerg_cat", "immun", "screening", "exam")
 
-  # Concomitant medications
-  "aceinhibitor",
-  "arb",
-  "betablocker",
-  "ccb",
-  "insulin",
-  "metformin",
-  "statin",
-  "thiazide",
-  "diuretic"
+comorb <- c(
+  "aki", "alcohol", "ampu", "anemia", "anxiety", "apnea", "afib", "arthtro",
+  "cancer", "care_dependency", "cardio", "ckd", "contusion", "copd", "cvd", "dehydration",
+  "delirium", "depression", "diab_neuro", "dorso", "dyslipid", "edema", "eskd",
+  "falls", "flu", "fractures", "hepa", "hf_hosp", "hyper", "hypoglyc", "ihd",
+  "infection", "malnutrition", "mental", "nafld", "osteo", "pace", "parkinson",
+  "proteinuria", "pvd", "retino", "revas", "sepsis", "smoke", "syncope",
+  "thyroid", "vhd", "vte", "weak"
 )
+
+meds <- c("aceinhibitor", "arb", "betablocker", "ccb", "diuretic",
+          "insulin", "metformin", "statin", "thiazide")
+
+# sort a group alphabetically by label (case-insensitive)
+sort_by_label <- function(vars) vars[order(tolower(labels[vars]))]
+
+# define the order in which covariates will be listed in the table
+cov_list <- c(
+  socio,                       # kept in logical order
+  sort_by_label(utilization),
+  sort_by_label(comorb),
+  sort_by_label(meds)
+)
+
+# check that every labeled covariate is in the table, and vice versa
+stopifnot(setequal(cov_list, names(labels)))
 
 
 # make table 1 for entire sample

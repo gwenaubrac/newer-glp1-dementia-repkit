@@ -1,4 +1,4 @@
-# R
+# R files
 .Renviron
 .env
 .Rhistory
@@ -13,6 +13,6 @@ Thumbs.db
 logs/
 _globals.do
 
-# Quarto
+# Quarto/R programs
 code/*_files/
 code/*.html

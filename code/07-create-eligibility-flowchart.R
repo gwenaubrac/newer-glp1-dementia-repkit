@@ -45,7 +45,7 @@ extract_count <- function(line) {
 
   # number immediately followed or preceded by word "patients"
   patients <- str_match(line, "(?i)(\\d[\\d,]*)\\s*(?:patients)\\b")
-  if (!is.na(remain[1,2])) return(as.integer(str_replace_all(remain[1,2], "," , "")))
+  if (!is.na(patients[1,2])) return(as.integer(str_replace_all(patients[1,2], "," , "")))
   patients <- str_match(line, "(?i)\\b(?:patients)[: ]+\\s*(\\d[\\d,]*)")
   if (!is.na(patients[1,2])) return(as.integer(str_replace_all(patients[1,2], "," , "")))
 

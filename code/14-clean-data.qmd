@@ -42,6 +42,27 @@ SCENARIO <- get_scenario()
 
 data <- read_dta(out_path("covs_novel.dta"))
 
+table(data$index_class)
+table(data$index_glp1)
+
+# Exclude patients whose index drug is a GLP-1 RA other than semaglutide or
+# tirzepatide (i.e. dulaglutide, liraglutide). These are captured by
+# index_class == "GLP1" but have index_glp1 values outside our two medications
+# of interest.
+#
+# This is a cohort-definition exclusion, not a data-quality one, so it runs
+# first - ahead of the unreadable-BMI and missing-region filters - so that it
+# groups with the study population exclusions in figure 1 and box 3 lands on
+# the count after all study population exclusions. All three are independent
+# row filters, so the order does not change the final cohort.
+#
+# Distinct from step 06's lookback_glp exclusion, which is about PRIOR USE of
+# albiglutide/exenatide/lixisenatide or cholinesterase inhibitors during the
+# lookback window. This one is about the index drug itself.
+data %<>%
+  filter(index_class != "GLP1" | index_glp1 %in% c("semaglutide", "tirzepatide"))
+n_after_other_glp1 <- nrow(data)
+
 summary(data$bmi)
 
 # should be empty
@@ -53,9 +74,6 @@ test <- data %>% filter(is.na(bmi))
 # characters aren't both digits yields a missing BMI. Exclude them.
 data %<>% filter(!is.na(bmi))
 n_after_bmi <- nrow(data)
-
-table(data$index_class)
-table(data$index_glp1)
 
 # combine hypertension into single binary indicator
 data %>%
@@ -75,6 +93,21 @@ data %<>%
   )
 
 table(data$hyper)
+
+# combine dorsopathies into single binary indicator
+data %>%
+  summarize(
+    dorso1 = sum(dorso1),
+    dorso2 = sum(dorso2),
+    dorso3 = sum(dorso3)
+  )
+
+data %<>%
+  mutate(
+    dorso = if_else(dorso1==1 | dorso2==1 | dorso3==1, 1, 0)
+  )
+
+table(data$dorso)
 
 # combine dyslipidemia into single binary indicator
 data %>%
@@ -119,19 +152,20 @@ cov_clinic <- c(
   "nafld",
   "pace",
   "pvd",
-  "vhd",
   "edema",
   "copd",
   "apnea",
   "thyroid",
   "depression",
   "anxiety",
-  "falls", 
   "fractures",
   "care_dependency",
   "malnutrition",
   "aki",
   "proteinuria",
+  "immun",
+  "screening",
+  "exam",
   "hf_hosp",
   "hosp_cat",
   "emerg_cat",
@@ -145,8 +179,28 @@ cov_clinic <- c(
   "metformin",
   "diuretic",
   #"thiazolidinediones" none found for now
-  "prop_b_q"
-          )
+  "prop_b_q",
+  "anemia",
+  "arthtro",
+  "afib",
+  "contusion",
+  "weak",
+  "dehydration",
+  "delirium",
+  "dorso",
+  "falls",
+  "osteo",
+  "parkinson",
+  "flu",
+  "sepsis",
+  "mental",
+  "infection",
+  "smoke",
+  "syncope",
+  "vhd",
+  "cardio",
+  "vte"
+)
 
 summary(data)
 
@@ -238,15 +292,6 @@ if (is.finite(SCENARIO$max_baseline_age)) {
   data %<>% filter(age <= SCENARIO$max_baseline_age)
 }
 
-# Exclude other GLP-1 agents (dulaglutide, liraglutide) that are not part of
-# the semaglutide/tirzepatide vs. comparator-class analysis. These patients
-# are captured by index_class == "GLP1" but have index_glp1 values outside
-# our two agents of interest.
-n_before_other_glp1 <- nrow(data)
-data %<>%
-  filter(index_class != "GLP1" | index_glp1 %in% c("semaglutide", "tirzepatide"))
-n_after_other_glp1 <- nrow(data)
-
 saveRDS(cov_list, file.path(output_dir, "cov_list_novel.rds"))
 saveRDS(data, file.path(output_dir, "clean_novel.rds"))
 
@@ -257,18 +302,29 @@ flowchart_path <- file.path(results_dir, "eligibility_steps_by_cohort.csv")
 if (file.exists(flowchart_path)) {
   flow <- readr::read_csv(flowchart_path, show_col_types = FALSE)
 
+  # NOTE: these strings must match `seq_steps`/`subgroup_steps` below exactly,
+  # and the `is_analytic`/`is_subgroup` matches in 19-create-plots.qmd. A
+  # mismatch silently breaks re-run idempotency here and box assignment there.
   r_side_steps <- c(
+    "After exclude dulaglutide or liraglutide as index drug",
     "After exclude unreadable BMI/Z68 value", "After exclude missing region",
-    "After exclude other GLP-1 agents",
+    # Retired spellings of the index-drug row, removed so CSVs written by
+    # earlier versions of this script don't leave a stale duplicate behind.
+    "After exclude other use of GLP-1 RAs or cholinesterase inhibitors",
+    "After exclude use of other GLP-1 RAs or cholinesterase inhibitors",
+    "After exclude other use of other GLP-1 RAs or cholinesterase inhibitors",
     "Subgroup novel semaglutide", "Subgroup novel tirzepatide",
     "Subgroup novel SGLT2", "Subgroup novel DPP4",
     "Subgroup novel sulfonylureas"
   )
   flow <- flow[!flow$step %in% r_side_steps, , drop = FALSE]
 
-  seq_steps <- c("After exclude unreadable BMI/Z68 value", "After exclude missing region",
-                 "After exclude other GLP-1 agents")
-  seq_counts <- c(n_after_bmi, n_after_region, n_after_other_glp1)
+  # Order must match the order the filters are applied above, since the
+  # excluded counts below are computed as running differences.
+  seq_steps <- c("After exclude dulaglutide or liraglutide as index drug",
+                 "After exclude unreadable BMI/Z68 value",
+                 "After exclude missing region")
+  seq_counts <- c(n_after_other_glp1, n_after_bmi, n_after_region)
   running <- tail(flow$novel, 1)
   excluded_seq <- integer(length(seq_counts))
   for (i in seq_along(seq_counts)) {

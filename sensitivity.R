@@ -5,8 +5,8 @@
 # inherits from `.main` and overrides only the fields that differ. The main
 # analysis is not a scenario - it is what `run_all.R` runs with no overrides.
 #
-# Sourced by run_sensitivity.R (the driver) and by the four parameterized
-# analysis scripts (05, 14, 16, 18). Those scripts call get_scenario(), which
+# Sourced by run_sensitivity.R (the driver) and by the parameterized
+# analysis scripts (05, 14, 16, 18, 20). Those scripts call get_scenario(), which
 # reads SCENARIO_NAME from the environment and returns the matching list,
 # falling back to the main defaults when SCENARIO_NAME is unset or "main".
 #
@@ -15,7 +15,8 @@
 # per-scenario output folder and then launches `run_all.R --from <start_step>`,
 # so upstream intermediate files are reused without being overwritten.
 # Step indices: 5 = 05-extract-coverage-indicator; 14 = 14-clean-data;
-# 15 = 15a-compute-ipcw; 17 = 16-compute-ow; 19 = 18-run-survival-analyses.
+# 15 = 15a-compute-ipcw; 17 = 16-compute-ow; 19 = 18-run-survival-analyses;
+# 21 = 20-competing-events.
 # =============================================================================
 
 .main <- list(
@@ -28,7 +29,8 @@
   coverage_months     = 12L,             # 6 or 12
   followup_start      = "after_grace",   # "after_grace" (index+90d) or "index_date"
   extra_followup_days = 0L,              # 0 in main analysis; >N to require additional followup beyond 90 days
-  max_baseline_age    = Inf              # numeric; Inf disables the cap
+  max_baseline_age    = Inf,             # numeric; Inf disables the cap
+  competing_risk      = FALSE            # logical; TRUE runs the Aalen-Johansen analysis (step 20)
 )
 
 .override <- function(base, ...) modifyList(base, list(...))
@@ -72,14 +74,19 @@ SENSITIVITY_SCENARIOS <- list(
     followup_start = "index_date"),
 
   sens8_6mo_followup = .override(.main,
-    label = "Require 6 months of follow-up after index, excluding early events",
+    label = "Start follow-up 6 months after index date (exclude early events)",
     start_step = 14L,                    # 14-clean-data
     extra_followup_days = 90L),
 
   sens9_age_cap = .override(.main,
     label = "Exclude patients aged >85 at baseline",
     start_step = 14L,                    # 14-clean-data
-    max_baseline_age = 85)
+    max_baseline_age = 85),
+
+  sens10_competing_risk = .override(.main,
+    label = "Death as a competing event (Aalen-Johansen estimator)",
+    start_step = 21L,                    # 20-competing-events
+    competing_risk = TRUE)
 )
 
 # Called by analysis scripts: returns the scenario named by SCENARIO_NAME env
