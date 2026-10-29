@@ -396,18 +396,22 @@ write.csv(
   row.names = FALSE
 )
 
-# Manuscript table 1: only written on the main run; sensitivity scenarios
-# skip this so they don't overwrite main's manuscript copy.
-if (is_main) {
 manuscript_tab_dir <- file.path(project_root, "manuscript", "tables")
-dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
 
-manuscript_tab1 <- final_tab1[, c("var", "glp1",
-                                  "sglt2", "smd_sglt2",
-                                  "dpp4", "smd_dpp4",
-                                  "sulfo", "smd_sulfo")]
-smd_cols <- c("smd_sglt2", "smd_dpp4", "smd_sulfo")  # overlap weight SMD value columns
-val_cols <- c("glp1", "sglt2", "dpp4", "sulfo")      # N (%) / mean (SD) cells
+# Format a combined table (var, glp1, sglt2, smd_sglt2, dpp4, ...) and save it
+# as a styled xlsx in manuscript/tables. Used for the unweighted table 1 and
+# the overlap-weighted e-table 7 below. col_headers maps the columns of
+# final_tab1 (in output order) to their header; "smd_*" columns are SMDs.
+tab1_headers <- c(var = "Variable", glp1 = "GLP-1 Agonists",
+                  sglt2 = "SGLT2 Inhibitors", smd_sglt2 = "Overlap Weight SMD a",
+                  dpp4 = "DPP4 Inhibitors",   smd_dpp4 = "Overlap Weight SMD a",
+                  sulfo = "Sulfonylureas",    smd_sulfo = "Overlap Weight SMD a")
+
+save_manuscript_tab1 <- function(final_tab1, file_name, extra_footnotes = character(0),
+                                 col_headers = tab1_headers) {
+manuscript_tab1 <- final_tab1[, names(col_headers)]
+smd_cols <- grep("^smd_", names(col_headers), value = TRUE)          # overlap weight SMD value columns
+val_cols <- setdiff(names(col_headers), c("var", smd_cols))          # N (%) / mean (SD) cells
 
 # Formatting to table1: indentation under category levels
 .raw   <- manuscript_tab1$var
@@ -476,24 +480,22 @@ manuscript_tab1$var[age_rows] <- sub("(Age \\(years\\))", "\\1 b",
                                      manuscript_tab1$var[age_rows])
 
 # Footnote for "Overlap Weight SMD" header (footnote a).
-colnames(manuscript_tab1) <- c("Variable",
-                                "GLP-1 Agonists",
-                                "SGLT2 Inhibitors", "Overlap Weight SMD a",
-                                "DPP4 Inhibitors",  "Overlap Weight SMD a",
-                                "Sulfonylureas",    "Overlap Weight SMD a")
+colnames(manuscript_tab1) <- unname(col_headers)
 
 # Append footnote rows at the bottom of the table.
+footnote_text <- c(
+  "a. Differences between GLP-1 agonists and the comparator medication on the left.",
+  "b. For privacy reasons, age is top-coded at 89 years. Patients aged 89 and above are represented as age 89.",
+  extra_footnotes
+)
 footnotes <- as.data.frame(
-  matrix("", nrow = 2, ncol = ncol(manuscript_tab1)),
+  matrix("", nrow = length(footnote_text), ncol = ncol(manuscript_tab1)),
   stringsAsFactors = FALSE
 )
 colnames(footnotes) <- colnames(manuscript_tab1)
-footnotes[, 1] <- c(
-  "a. Differences between GLP-1 agonists and the comparator medication on the left.",
-  "b. For privacy reasons, age is top-coded at 89 years. Patients aged 89 and above are represented as age 89."
-)
+footnotes[, 1] <- footnote_text
 manuscript_tab1 <- rbind(manuscript_tab1, footnotes)
-row_type <- c(row_type, "footnote", "footnote")
+row_type <- c(row_type, rep("footnote", length(footnote_text)))
 
 #### STYLED XLSX ####
 # Times New Roman 12pt; section headers and variable names bold + indented;
@@ -518,8 +520,7 @@ addStyle(wb, 1, do.call(createStyle, c(font, list(textDecoration = "bold"))),
          rows = 1, cols = 1:nc, gridExpand = TRUE)
 
 # Bold only section headers and "parent" variables
-val_idx <- which(colnames(xlsx_tab) %in% c("GLP-1 Agonists", "SGLT2 Inhibitors",
-                                           "DPP4 Inhibitors", "Sulfonylureas"))
+val_idx <- which(colnames(xlsx_tab) %in% col_headers[val_cols])
 for (i in seq_len(nr)) {
   is_parent <- all(xlsx_tab[i, val_idx] == "" | is.na(xlsx_tab[i, val_idx]))
   bold <- row_type[i] %in% c("section", "var") && is_parent
@@ -542,8 +543,134 @@ for (cc in smd_idx) {
 setColWidths(wb, 1, cols = 1, widths = 42)
 setColWidths(wb, 1, cols = 2:nc, widths = 18)
 
-saveWorkbook(wb, file.path(manuscript_tab_dir, "table-1-patient-char.xlsx"),
-             overwrite = TRUE)
+saveWorkbook(wb, file.path(manuscript_tab_dir, file_name), overwrite = TRUE)
+}
+
+# Manuscript table 1: only written on the main run; sensitivity scenarios
+# skip this so they don't overwrite main's manuscript copy.
+if (is_main) {
+  dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
+  save_manuscript_tab1(final_tab1, "table-1-patient-char.xlsx")
+}
+```
+
+## E-TABLE 7: TABLE 1 IN THE OVERLAP-WEIGHTED POPULATION
+
+Same layout as table 1, but counts, percentages, means and SDs are computed in the overlap-weighted pseudo-population (weight `ow`). Counts are sums of weights, rounded to the nearest integer. SMDs are the same overlap-weighted SMDs as in table 1. Because the weighted GLP-1 population differs by comparison, each comparison has its own GLP-1 column.
+
+```{r}
+#| label: weighted-table1
+#### OVERLAP-WEIGHTED TABLE 1 ####
+
+# weighted quantile (smallest x whose cumulative weight share reaches p)
+w_quantile <- function(x, w, p) {
+  o  <- order(x)
+  cw <- cumsum(w[o]) / sum(w)
+  x[o][which(cw >= p)[1]]
+}
+
+fmt_n_pct <- function(n, tot) {
+  if (round(n) == 0) return("0 (0%)")
+  sprintf("%d (%.1f%%)", as.integer(round(n)), 100 * n / tot)
+}
+
+# Weighted analogue of as.data.frame(table1(...)) for one comparison, with the
+# same row layout (label row, then indented level / summary rows) so it can be
+# merged and formatted exactly like the unweighted table. Returns columns
+# var, <comparator>, glp1, smd_ow.
+weighted_tab1 <- function(d, comparator, smd_lookup) {
+  grp <- list(d$trt == levels(d$trt)[1], d$trt == levels(d$trt)[2])
+  stat_rows <- function(f) vapply(grp, f, character(1))
+
+  out <- list(c("", stat_rows(function(g) sprintf("(N=%d)", as.integer(round(sum(d$ow[g]))))), ""))
+  for (v in cov_list) {
+    x <- d[[v]]
+    lab <- labels[[v]]
+    smd_v <- as.character(smd_lookup[[v]])
+    if (is.numeric(x)) {
+      out <- c(out, list(
+        c(lab, "", "", smd_v),
+        c("  Mean (SD)", stat_rows(function(g) {
+          ok <- g & !is.na(x); m <- weighted.mean(x[ok], d$ow[ok])
+          sd <- sqrt(sum(d$ow[ok] * (x[ok] - m)^2) / sum(d$ow[ok]))
+          sprintf("%s (%s)", signif_pad(m, 3), signif_pad(sd, 3))
+        }), ""),
+        c("  Median [Min, Max]", stat_rows(function(g) {
+          ok <- g & !is.na(x)
+          sprintf("%s [%s, %s]", signif_pad(w_quantile(x[ok], d$ow[ok], 0.5), 3),
+                  signif_pad(min(x[ok]), 3), signif_pad(max(x[ok]), 3))
+        }), "")
+      ))
+    } else {
+      x <- factor(x)
+      lv <- levels(x)
+      level_row <- function(l, row_lab, smd_cell) {
+        c(row_lab, stat_rows(function(g) {
+          tot <- sum(d$ow[g])
+          fmt_n_pct(sum(d$ow[g & !is.na(x) & x == l]), tot)
+        }), smd_cell)
+      }
+      if (length(lv) == 2 && all(lv %in% c("0", "1"))) {
+        # binary: one row showing the "1" level (as render_binary does)
+        out <- c(out, list(level_row("1", lab, smd_v)))
+      } else {
+        out <- c(out, list(c(lab, "", "", smd_v)),
+                 lapply(lv, function(l) level_row(l, paste0("  ", l), "")))
+      }
+    }
+    if (anyNA(x)) {
+      out <- c(out, list(c("  Missing", stat_rows(function(g)
+        fmt_n_pct(sum(d$ow[g & is.na(x)]), sum(d$ow[g]))), "")))
+    }
+  }
+  res <- as.data.frame(do.call(rbind, out), stringsAsFactors = FALSE)
+  colnames(res) <- c("var", comparator, "glp1", "smd_ow")
+  res
+}
+
+ow_smd_lookup <- function(d) setNames(abs(sapply(cov_list, compute_smd, data = d, weights = d$ow)), cov_list)
+
+tab1_ow_data1 <- weighted_tab1(data1, "sglt2", ow_smd_lookup(data1))
+tab1_ow_data2 <- weighted_tab1(data2, "dpp4",  ow_smd_lookup(data2))
+tab1_ow_data3 <- weighted_tab1(data3, "sulfo", ow_smd_lookup(data3))
+
+# row layout must match the unweighted table so the merge/formatting is valid
+stopifnot(identical(tab1_ow_data1$var, tab1_data1_new$var),
+          identical(tab1_ow_data2$var, tab1_data2_new$var),
+          identical(tab1_ow_data3$var, tab1_data3_new$var))
+
+# The overlap-weighted GLP-1 population differs by comparison, so each
+# comparison gets its own GLP-1 column.
+final_tab1_ow <- data.frame(
+  var = tab1_ow_data1$var,
+  glp1_sglt2 = tab1_ow_data1$glp1,
+  sglt2 = tab1_ow_data1$sglt2,
+  smd_sglt2 = tab1_ow_data1$smd_ow,
+  glp1_dpp4 = tab1_ow_data2$glp1,
+  dpp4 = tab1_ow_data2$dpp4,
+  smd_dpp4 = tab1_ow_data2$smd_ow,
+  glp1_sulfo = tab1_ow_data3$glp1,
+  sulfo = tab1_ow_data3$sulfo,
+  smd_sulfo = tab1_ow_data3$smd_ow
+)
+
+final_tab1_ow
+write.csv(final_tab1_ow, file.path(results_dir, "final_tab1_ow.csv"), row.names = FALSE)
+
+# Manuscript e-table 7: only written on the main run (see table 1 above).
+if (is_main) {
+  dir.create(manuscript_tab_dir, recursive = TRUE, showWarnings = FALSE)
+  save_manuscript_tab1(
+    final_tab1_ow, "e-table-7-patient-char-ow.xlsx",
+    extra_footnotes = paste(
+      "c. Characteristics in the overlap-weighted pseudo-population of each comparison. Counts are",
+      "sums of overlap weights rounded to the nearest integer."
+    ),
+    col_headers = c(var = "Variable",
+                    glp1_sglt2 = "GLP-1 Agonists", sglt2 = "SGLT2 Inhibitors", smd_sglt2 = "Overlap Weight SMD a",
+                    glp1_dpp4  = "GLP-1 Agonists", dpp4  = "DPP4 Inhibitors",  smd_dpp4  = "Overlap Weight SMD a",
+                    glp1_sulfo = "GLP-1 Agonists", sulfo = "Sulfonylureas",    smd_sulfo = "Overlap Weight SMD a")
+  )
 }
 ```
 
@@ -604,9 +731,8 @@ e_tab4 <- bind_rows(
 
 e_tab4
 
-# Manuscript e-table 4: only written on the main run. manuscript_tab_dir is
-# defined only inside the is_main block above, and sensitivity scenarios must
-# not overwrite main's manuscript copy, so guard the write here too.
+# Manuscript e-table 4: only written on the main run; sensitivity scenarios
+# must not overwrite main's manuscript copy.
 if (is_main) {
   write.csv(
     e_tab4,
