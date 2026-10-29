@@ -246,6 +246,81 @@ if (is_main) {
 ```
 
 
+# PROPENSITY SCORE DISTRIBUTION
+```{r}
+#| label: ps-distribution
+#| fig-width: 11
+#| fig-height: 11
+#### PROPENSITY SCORE DISTRIBUTION ####
+
+# `ps` is the fitted propensity score from the adjusted model in
+# 16-compute-ow.qmd (the same model used for the overlap weights), saved on
+# each cohort's rds. One row per comparison: density by group before (left)
+# and after (right) overlap weighting. geom_density normalizes the weights
+# within each group, so both columns are on the density scale.
+ps_comparators <- c(data1 = "SGLT2 Inhibitors",
+                    data2 = "DPP4 Inhibitors",
+                    data3 = "Sulfonylureas")
+
+ps_density_plot <- function(ps_data, weight_col, title, subtitle) {
+  ggplot(ps_data, aes(x = ps, fill = group, color = group,
+                      weight = .data[[weight_col]])) +
+    geom_density(alpha = 0.4, linewidth = 0.5) +
+    scale_fill_manual(values = c("#009E73", "#CC79A7")) +
+    scale_color_manual(values = c("#009E73", "#CC79A7")) +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    labs(title = title,
+         subtitle = subtitle,
+         x = "Propensity Score",
+         y = "Density",
+         fill = "Treatment",
+         color = "Treatment") +
+    theme_classic() +
+    theme(plot.title = element_text(face = "bold"),
+          legend.title = element_text(face = "bold"))
+}
+
+ps_rows <- lapply(names(ps_comparators), function(cohort_name) {
+  ref <- ps_comparators[[cohort_name]]
+
+  # Comparator first, GLP-1 second, so colors match the KM curves.
+  ps_data <- get(cohort_name) %>%
+    mutate(group = factor(if_else(trt == 1, "GLP1 RAs", ref),
+                          levels = c(ref, "GLP1 RAs")),
+           unweighted = 1)
+
+  p_before <- ps_density_plot(ps_data, "unweighted",
+                              panel_titles[[cohort_name]], "Before weighting")
+  p_after  <- ps_density_plot(ps_data, "ow",
+                              "", "After overlap weighting")
+
+  # one shared legend per row (the comparator differs between rows)
+  (p_before | p_after) +
+    plot_layout(guides = "collect") &
+    theme(legend.position = "bottom")
+})
+
+ps_figure <- wrap_plots(ps_rows, ncol = 1)
+ps_figure
+
+ggsave(file.path(results_dir, "ps_distribution.pdf"),
+       ps_figure, width = 11, height = 11, dpi = 300)
+
+## manuscript e-figure 1 (PS distribution before/after overlap weighting, all
+## 3 comparisons). Only saved on the main run.
+if (is_main) {
+  ggsave(file.path(manuscript_fig_dir, "e-figure-1-ps-distribution.pdf"),
+         ps_figure, width = 11, height = 11, dpi = 300)
+  # High-resolution TIFF for manuscript submission (LZW-compressed, 300 dpi).
+  ggsave(file.path(manuscript_fig_dir, "e-figure-1-ps-distribution.tiff"),
+         ps_figure, width = 11, height = 11, dpi = 300,
+         device = "tiff", compression = "lzw")
+}
+
+rm(ps_rows, ps_figure, ps_comparators, ps_density_plot)
+```
+
+
 # FOREST PLOT
 ```{r}
 #| label: forest-plot

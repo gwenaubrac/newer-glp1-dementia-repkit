@@ -235,7 +235,7 @@ for (r in results) {
 cat(sprintf("\n%d passed, %d failed. Logs: %s\n", n_ok, n_bad, LOG_DIR))
 
 # --- refresh main's table 2 ---------------------------------------------------
-# table-2-results.csv aggregates the main analysis with every sensitivity
+# table-2-results.xlsx aggregates the main analysis with every sensitivity
 # scenario it can find on disk. Re-run step 18 on the main scenario so the
 # table picks up the scenarios we just produced.
 if (n_ok > 0L) {

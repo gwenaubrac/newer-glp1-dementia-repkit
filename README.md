@@ -46,7 +46,25 @@ The runner executes the 21 scripts in `code/` in order. Intermediate files go to
 
 If you want to run a specific program directly in Rstudio, just source 00-setup.R first to load the environment.
 
-> **Note on the manuscript folder.** The pipeline auto-populates `manuscript/figures/` with `figure-1-flowchart`, `figure-2-forest-plot`, and `figure-3-km-curves` (each as PDF + TIFF), and `manuscript/tables/` with `table-1-patient-char.csv`, `table-2-results.csv`, `e-table-4-weights.csv`, and `e-table-5-nco.csv`. Running the `sens10_competing_risk` scenario additionally writes `e-figure-1-aj-curves` (PDF + TIFF) and `e-table-6-competing-risk.xlsx`. Any other tables or figures that appear in the manuscript folder (e.g., e-tables 1-3, table 3) were added by the authors directly and are not produced by the pipeline.
+> **Note on the manuscript folder.** Figures are saved as PDF + TIFF in `manuscript/figures/` and tables as `.xlsx` in `manuscript/tables/`. Items marked *authors* were added by hand and are not produced by the pipeline.
+>
+> | Item | File | Written by |
+> |---|---|---|
+> | Figure 1: flowchart | `figure-1-flowchart` | `19-create-plots` |
+> | Figure 2: forest plot | `figure-2-forest-plot` | `19-create-plots` |
+> | Figure 3: KM curves | `figure-3-km-curves` | `19-create-plots` |
+> | Table 1: patient characteristics | `table-1-patient-char.xlsx` | `17-describe-study-sample` |
+> | Table 2: results | `table-2-results.xlsx` | `18-run-survival-analyses` |
+> | e-Figure 1: propensity score distribution before/after overlap weighting | `e-figure-1-ps-distribution` | `19-create-plots` |
+> | e-Figure 2: Aalen-Johansen curves | `e-figure-2-aj-curves` | `20-competing-events` (`sens10_competing_risk` only) |
+> | e-Table 1: target trial emulation | `e-table-1-tte.xlsx` | *authors* |
+> | e-Table 2: codes for key variables | `e-table-2-key-variables.xlsx` | *authors* |
+> | e-Table 3: medications | `e-table-3-medications.xlsx` | *authors* |
+> | e-Table 4: analytic weights | `e-table-4-weights.csv` | `17-describe-study-sample` |
+> | e-Table 5: Schoenfeld residual tests | `e-table-5-ph-test.xlsx` | `18-run-survival-analyses` |
+> | e-Table 6: negative control outcomes | `e-table-6-nco.xlsx` | `18-run-survival-analyses` |
+> | e-Table 7: switching and discontinuation within the first year | not yet written to `manuscript/` (see `results/main/switch_first_year_*.csv`, `disc_first_year_*.csv`) | `15b-describe-ipcw` |
+> | e-Table 8: competing-risk (Aalen-Johansen) results | `e-table-8-competing-risk.xlsx` | `20-competing-events` (`sens10_competing_risk` only) |
 
 **Useful flags** (pass to `Rscript run_all.R …` or the wrapper):
 
@@ -72,7 +90,7 @@ Rscript run_sensitivity.R --list                   # show scenario names + label
 Rscript run_sensitivity.R --help
 ```
 
-Per-scenario results land in `results/<scenario_name>/` (main's live in `results/main/`). After all scenarios complete, the driver automatically re-runs step 18 on the main scenario to refresh `manuscript/tables/table-2-results.csv` with the new sensitivity rows.
+Per-scenario results land in `results/<scenario_name>/` (main's live in `results/main/`). After all scenarios complete, the driver automatically re-runs step 18 on the main scenario to refresh `manuscript/tables/table-2-results.xlsx` with the new sensitivity rows.
 
 **How the isolation works.** Each scenario has its own intermediate-file folder at `output_sensitivity/<scenario_name>/`. Analysis scripts try the scenario folder first when reading any upstream file and fall back to main's `output/` if the file isn't there, so scenarios reuse main's intermediates without copying them up front and without overwriting main's `output/` when they recompute. Per-scenario results (`all_cox_results_novel.rds`, balance plots, patient-characteristics tables, etc.) all land in `results/<scenario_name>/`, fully isolated from `results/main/`. Manuscript figures and tables in `manuscript/figures/` and `manuscript/tables/` are only written on the main run, so sensitivity scenarios never overwrite them.
 
@@ -87,7 +105,7 @@ Per-scenario results land in `results/<scenario_name>/` (main's live in `results
 | `sens7_index_followup` | Start follow-up at index date (include early events) | `14-clean-data` |
 | `sens8_6mo_followup` | Require 6 months of follow-up after index, excluding early events | `14-clean-data` |
 | `sens9_age_cap` | Exclude patients aged >85 at baseline | `14-clean-data` |
-| `sens10_competing_risk` | Death as a competing event: overlap-weighted Aalen-Johansen cumulative incidence of dementia and death, 2-year risks, risk difference and risk ratio with bootstrap CIs (primary ITT analysis only); reported in e-table 6 and e-figure 1 rather than Table 2 | `20-competing-events` |
+| `sens10_competing_risk` | Death as a competing event: overlap-weighted Aalen-Johansen cumulative incidence of dementia and death, 2-year risks, risk difference and risk ratio with bootstrap CIs (primary ITT analysis only); reported in e-table 8 and e-figure 2 rather than Table 2 | `20-competing-events` |
 
 To add a new scenario, append an entry to `SENSITIVITY_SCENARIOS` in `sensitivity.R` overriding only the relevant fields of `.main`. The analysis scripts that read scenario parameters are `05`, `14`, `16`, `17`, `18`, `19`, and `20`. Step `20-competing-events.R` only does work for `sens10_competing_risk` and is skipped on every other run.
 

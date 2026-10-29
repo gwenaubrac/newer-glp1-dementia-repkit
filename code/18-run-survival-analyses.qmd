@@ -818,7 +818,7 @@ fmt_hr <- function(st, app, out = "dementia_allcause") {
   }, character(1))
 }
 
-#### e-Table 5: Negative Control Outcomes (overlap-weighted ITT) ####
+#### e-Table 6: Negative Control Outcomes (overlap-weighted ITT) ####
 nco_labels <- c(
   tooth        = "Traumatic tooth fracture",
   bell         = "Bell's Palsy",
@@ -831,11 +831,11 @@ nco_labels <- c(
   gastro       = "Gastrointestinal events"
 )
 
-e_tab5 <- do.call(rbind, lapply(names(nco_labels), function(out) {
+e_tab6 <- do.call(rbind, lapply(names(nco_labels), function(out) {
   c(`Negative Control Outcome` = nco_labels[[out]], fmt_hr(summary_table, "itt", out = out))
 }))
-e_tab5 <- as.data.frame(e_tab5, stringsAsFactors = FALSE)
-colnames(e_tab5) <- c("Negative Control Outcome", unname(cohort_cols))
+e_tab6 <- as.data.frame(e_tab6, stringsAsFactors = FALSE)
+colnames(e_tab6) <- c("Negative Control Outcome", unname(cohort_cols))
 
 # Footnote: crude (unweighted) number of events for each outcome by treatment
 # group, pulled from followup_times (ITT approach). n_events_trt = GLP-1
@@ -860,16 +860,16 @@ footnote_df <- as.data.frame(
   ),
   stringsAsFactors = FALSE
 )
-colnames(footnote_df) <- colnames(e_tab5)
-e_tab5 <- rbind(e_tab5, footnote_df)
+colnames(footnote_df) <- colnames(e_tab6)
+e_tab6 <- rbind(e_tab6, footnote_df)
 
 if (is_main) {
-  write_manuscript_xlsx(e_tab5,
-                        file.path(manuscript_tab_dir, "e-table-5-nco.xlsx"),
-                        sheet = "e-Table 5")
+  write_manuscript_xlsx(e_tab6,
+                        file.path(manuscript_tab_dir, "e-table-6-nco.xlsx"),
+                        sheet = "e-Table 6")
 }
 
-#### e-Table 7: Proportional hazards assumption (Schoenfeld residuals) ####
+#### e-Table 5: Proportional hazards assumption (Schoenfeld residuals) ####
 # cox.zph test of the treatment term for each all-cause dementia model in the
 # main analysis, pulled from cox_ph. In the main run the PP weighted model uses
 # overlap weights only (no IPCW), despite the "pp weighted + IPCW" label.
@@ -883,7 +883,7 @@ cohort_lab <- c(data1 = "GLP1s vs SGLT2s", data2 = "GLP1s vs DPP4s",
                 data3 = "GLP1s vs Sulfonylureas")
 fmt_p <- function(p) if_else(p < 0.001, "<0.001", sprintf("%.3f", p))
 
-e_tab7 <- do.call(rbind, lapply(names(cohort_lab), function(coh) {
+e_tab5 <- do.call(rbind, lapply(names(cohort_lab), function(coh) {
   rbind(
     c(cohort_lab[[coh]], "", ""),
     do.call(rbind, lapply(names(ph_models), function(app) {
@@ -893,8 +893,8 @@ e_tab7 <- do.call(rbind, lapply(names(cohort_lab), function(coh) {
     }))
   )
 }))
-e_tab7 <- as.data.frame(e_tab7, stringsAsFactors = FALSE)
-colnames(e_tab7) <- c("Comparison and model", "Chi-square (1 df)", "P value")
+e_tab5 <- as.data.frame(e_tab5, stringsAsFactors = FALSE)
+colnames(e_tab5) <- c("Comparison and model", "Chi-square (1 df)", "P value")
 
 footnote_df <- as.data.frame(
   rbind(
@@ -903,13 +903,13 @@ footnote_df <- as.data.frame(
   ),
   stringsAsFactors = FALSE
 )
-colnames(footnote_df) <- colnames(e_tab7)
-e_tab7 <- rbind(e_tab7, footnote_df)
+colnames(footnote_df) <- colnames(e_tab5)
+e_tab5 <- rbind(e_tab5, footnote_df)
 
 if (is_main) {
-  write_manuscript_xlsx(e_tab7,
-                        file.path(manuscript_tab_dir, "e-table-7-ph-test.xlsx"),
-                        sheet = "e-Table 7")
+  write_manuscript_xlsx(e_tab5,
+                        file.path(manuscript_tab_dir, "e-table-5-ph-test.xlsx"),
+                        sheet = "e-Table 5")
 }
 ```
 
@@ -948,7 +948,7 @@ if (is_main) {
     "sens9_age_cap"
   )
   # sens10_competing_risk reports risks rather than HRs; it has its own
-  # supplemental table (e-table 6, written by 20-competing-events.R).
+  # supplemental table (e-table 8, written by 20-competing-events.R).
   sens_order <- c(sens_order,
                   setdiff(names(SENSITIVITY_SCENARIOS),
                           c(sens_order, "sens10_competing_risk")))

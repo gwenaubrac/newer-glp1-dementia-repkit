@@ -24,8 +24,8 @@
 #
 # Runs only for the sens10_competing_risk scenario (see sensitivity.R):
 #   Rscript run_sensitivity.R --scenario sens10_competing_risk
-# Results are saved in results/sens10_competing_risk/. Manuscript e-table 6 and
-# e-figure 1 are written only on that scenario run. When sourced
+# Results are saved in results/sens10_competing_risk/. Manuscript e-table 8 and
+# e-figure 2 are written only on that scenario run. When sourced
 # interactively the analysis always runs, writing results to RESULTS_DIR.
 #
 # Number of bootstrap resamples can be changed with the AJ_BOOT_REPS env var
@@ -345,7 +345,7 @@ for (cohort_name in c("data1", "data2", "data3")) {
   ggsave(file.path(results_dir, paste0("aj_cif_dementia_allcause_", cohort_name, ".pdf")),
          p, width = 10, height = 6)
 
-  # e-figure 1 panel: dementia cumulative incidence + number at risk, laid out
+  # e-figure 2 panel: dementia cumulative incidence + number at risk, laid out
   # like the per-cohort panels of manuscript figure 3
   rr <- res %>% filter(outcome == "dementia_allcause", measure == "rr")
   x_breaks <- seq(0, horizon, by = 200)
@@ -413,7 +413,7 @@ write.csv(aj_counts,  file.path(results_dir, "aj_counts.csv"),  row.names = FALS
 saveRDS(aj_results, file.path(results_dir, "aj_results_novel.rds"))
 
 
-#### MANUSCRIPT E-TABLE 6 AND E-FIGURE 1 ####
+#### MANUSCRIPT E-TABLE 8 AND E-FIGURE 2 ####
 
 cohort_cols <- c(
   data1 = "GLP1s vs SGLT2s",
@@ -473,13 +473,13 @@ if (write_manuscript) {
   dir.create(manuscript_fig_dir, recursive = TRUE, showWarnings = FALSE)
 
   write_manuscript_xlsx(e_tab6,
-                        file.path(manuscript_tab_dir, "e-table-6-competing-risk.xlsx"),
-                        sheet = "e-Table 6")
+                        file.path(manuscript_tab_dir, "e-table-8-competing-risk.xlsx"),
+                        sheet = "e-Table 8")
 
-  ggsave(file.path(manuscript_fig_dir, "e-figure-1-aj-curves.pdf"),
+  ggsave(file.path(manuscript_fig_dir, "e-figure-2-aj-curves.pdf"),
          efig, width = 8, height = 16)
   # High-resolution TIFF for manuscript submission (LZW-compressed, 300 dpi).
-  ggsave(file.path(manuscript_fig_dir, "e-figure-1-aj-curves.tiff"),
+  ggsave(file.path(manuscript_fig_dir, "e-figure-2-aj-curves.tiff"),
          efig, width = 8, height = 16, dpi = 300,
          device = "tiff", compression = "lzw")
 }
